@@ -1,0 +1,7 @@
+{
+  "name": "Device Parameter",
+  "description": "Aplikasi pemeriksa parameter sistem, monitor realtime, dan audit integritas perangkat.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
