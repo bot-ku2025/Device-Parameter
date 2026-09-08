@@ -43,17 +43,27 @@ class SecurityAuditor(private val context: Context) {
 
         // 3. Serial
         val serial = try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                try {
-                    Build.getSerial()
-                } catch (_: SecurityException) {
-                    Build.SERIAL.ifEmpty { "1YW0Z2BXOV2G" }
+            val roSerial = getSystemProperty("ro.serialno")
+            val roBootSerial = getSystemProperty("ro.boot.serialno")
+            when {
+                roSerial.isNotEmpty() && !roSerial.equals("unknown", ignoreCase = true) -> roSerial
+                roBootSerial.isNotEmpty() && !roBootSerial.equals("unknown", ignoreCase = true) -> roBootSerial
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.O -> {
+                    try {
+                        Build.getSerial()
+                    } catch (_: SecurityException) {
+                        if (Build.SERIAL.isNotEmpty() && !Build.SERIAL.equals("unknown", ignoreCase = true)) {
+                            Build.SERIAL
+                        } else {
+                            "unknown"
+                        }
+                    }
                 }
-            } else {
-                Build.SERIAL.ifEmpty { "1YW0Z2BXOV2G" }
+                Build.SERIAL.isNotEmpty() && !Build.SERIAL.equals("unknown", ignoreCase = true) -> Build.SERIAL
+                else -> "unknown"
             }
         } catch (_: Exception) {
-            "1YW0Z2BXOV2G"
+            "unknown"
         }
 
         // 4. Fingerprint
@@ -135,7 +145,7 @@ class SecurityAuditor(private val context: Context) {
             statusMap["android_id"] = if (androidId == "9774d56d682e549c" || androidId.length != 16) CheckStatus.FAIL else CheckStatus.PASS
             statusMap["imei1"] = if (imei1.length == 15) CheckStatus.PASS else CheckStatus.WARN
             statusMap["imei2"] = if (imei2.length == 15) CheckStatus.PASS else CheckStatus.WARN
-            statusMap["serial"] = if (serial.equals("unknown", ignoreCase = true)) CheckStatus.WARN else CheckStatus.PASS
+            statusMap["serial"] = if (serial.equals("unknown", ignoreCase = true) || serial == "0123456789ABCDEF") CheckStatus.WARN else CheckStatus.PASS
             statusMap["fingerprint"] = if (isFingerprintConsistent(brand, codename, fingerprint)) CheckStatus.PASS else CheckStatus.WARN
             statusMap["gsf_id"] = if (gsfId.length >= 12) CheckStatus.PASS else CheckStatus.WARN
             statusMap["wifi_mac"] = CheckStatus.PASS
@@ -147,7 +157,11 @@ class SecurityAuditor(private val context: Context) {
             statusMap["widevine_drm"] = if (widevineDrmId.isNotEmpty()) CheckStatus.PASS else CheckStatus.WARN
             statusMap["user_agent"] = CheckStatus.PASS
             statusMap["installer_package"] = if (installerPackage == "com.android.vending") CheckStatus.PASS else CheckStatus.WARN
-            statusMap["hidden_keyboards"] = if (hiddenKeyboards.contains("adbkeyboard") || hiddenKeyboards.contains("appium")) CheckStatus.WARN else CheckStatus.PASS
+            statusMap["hidden_keyboards"] = if (
+                hiddenKeyboards.contains("adbkeyboard", ignoreCase = true) ||
+                hiddenKeyboards.contains("appium", ignoreCase = true) ||
+                hiddenKeyboards.contains("uiautomator", ignoreCase = true)
+            ) CheckStatus.WARN else CheckStatus.PASS
             statusMap["virtual_ime"] = CheckStatus.PASS
             statusMap["bt_name"] = CheckStatus.PASS
             statusMap["bt_addr"] = CheckStatus.PASS
@@ -230,10 +244,21 @@ class SecurityAuditor(private val context: Context) {
             "serial", "Nomor Seri Perangkat (SerialNo)", serial,
             if (isAudited) {
                 if (statusMap["serial"] == CheckStatus.WARN)
-                    "WASPADA: Serial terbaca 'unknown' atau serial default emulator (0123456789ABCDEF)."
-                else "Nomor serial unik alfanumerik OEM terverifikasi valid."
+                    "WASPADA: Serial terbaca '$serial' atau dibatasi izin privasi Android. Sistem anti-fraud/perbankan memeriksa apakah nilai properti `ro.serialno` dan `ro.boot.serialno` bernilai dummy/unknown atau konsisten dengan nomor seri OEM."
+                else "Nomor serial unik alfanumerik OEM terverifikasi valid ($serial)."
             } else "Menunggu audit nomor seri perangkat.",
-            "Gunakan modul MagiskHide Props Config atau resetprop untuk mengisi `ro.serialno` dan `ro.boot.serialno` dengan alfanumerik 8-12 karakter acak unik."
+            "Cara Fix Tuntas Nomor Seri (SerialNo):\n" +
+            "1. Jika Menggunakan Magisk / KernelSU / APatch:\n" +
+            "   Jalankan perintah berikut di terminal root (Termux dengan akses `su`):\n" +
+            "   su\n" +
+            "   resetprop ro.serialno 2401A18BC927\n" +
+            "   resetprop ro.boot.serialno 2401A18BC927\n" +
+            "   (Ganti '2401A18BC927' dengan serial alfanumerik acak 10-12 karakter).\n" +
+            "2. Alternatif Modul Magisk/Zygisk:\n" +
+            "   Pasang modul 'MagiskHide Props Config' atau modul 'Chiteroman Play Integrity Fix', lalu aktifkan opsi spoof serial number.\n" +
+            "3. Jika Menggunakan LSPosed:\n" +
+            "   Gunakan modul 'Device ID Masker' atau 'Fake Device ID', centang aplikasi target, dan masukkan Serial Number acak.\n" +
+            "4. Reboot perangkat agar perubahan diterapkan ke seluruh layer sistem."
         )
         p(
             "fingerprint", "Build Fingerprint", fingerprint,
@@ -314,10 +339,20 @@ class SecurityAuditor(private val context: Context) {
             "hidden_keyboards", "Paket Keyboard Otomatisasi", hiddenKeyboards,
             if (isAudited) {
                 if (statusMap["hidden_keyboards"] == CheckStatus.WARN)
-                    "TERDETEKSI: Ditemukan paket keyboard otomatisasi (ADBKeyboard/Appium) yang sering digunakan bot injeksi input."
-                else "Tidak ada keyboard debug atau tool otomatisasi input yang mencurigakan."
+                    "WASPADA: Terdeteksi paket keyboard otomatisasi input ($hiddenKeyboards) yang umum digunakan skrip bot, macro injeksi, atau automation framework (ADB/Appium)."
+                else "BERSIH: Tidak ditemukan keyboard otomatisasi atau service input debug yang mencurigakan."
             } else "Menunggu audit paket keyboard virtual.",
-            "Buka Pengaturan > Aplikasi > cari 'ADB Keyboard' atau 'Appium' lalu copot pemasangan (uninstall) atau bekukan paket via modul Hide My Applist."
+            "Cara Fix Tuntas Paket Keyboard Otomatisasi:\n" +
+            "1. Uninstall Aplikasi Terkait:\n" +
+            "   Buka Pengaturan HP > Aplikasi / Manajemen Aplikasi > Cari nama paket yang terdeteksi (seperti ADB Keyboard atau Appium Settings) > Tekan 'Copot Pemasangan' (Uninstall).\n" +
+            "2. Copot via Terminal Root / ADB jika aplikasi sistem:\n" +
+            "   Jalankan di Termux atau ADB Shell:\n" +
+            "   pm uninstall --user 0 com.android.adbkeyboard\n" +
+            "   pm uninstall --user 0 io.appium.settings\n" +
+            "3. Jika tetap memerlukan keyboard tersebut untuk debugging:\n" +
+            "   Gunakan modul LSPosed 'Hide My Applist' (HMA).\n" +
+            "   - Buka HMA > Template Configuration > Buat blacklist template yang menyembunyikan paket otomatisasi.\n" +
+            "   - Terapkan template tersebut pada aplikasi target / perbankan agar paket tidak dapat dipindai."
         )
         p(
             "virtual_ime", "Default Input Method (IME)", defaultIme,
@@ -556,50 +591,73 @@ class SecurityAuditor(private val context: Context) {
             else "Perangkat Terdeteksi Gagal MEETS_DEVICE_INTEGRITY (Perlu modul PlayIntegrityFix)"
         )
 
-        // Calculate Spoof Score
-        val passCount = checks.count { it.status == CheckStatus.PASS }
-        val warnCount = checks.count { it.status == CheckStatus.WARN }
-        val failCount = checks.count { it.status == CheckStatus.FAIL }
+        val auditedIdentity = collectDeviceIdentity(isAudited = true)
+
+        // Combine Security Shield Checks (8) + Parameter Identitas (25) for complete accuracy
+        val secPass = checks.count { it.status == CheckStatus.PASS }
+        val secWarn = checks.count { it.status == CheckStatus.WARN }
+        val secFail = checks.count { it.status == CheckStatus.FAIL }
+
+        val paramPass = auditedIdentity.parameterStatuses.values.count { it == CheckStatus.PASS }
+        val paramWarn = auditedIdentity.parameterStatuses.values.count { it == CheckStatus.WARN }
+        val paramFail = auditedIdentity.parameterStatuses.values.count { it == CheckStatus.FAIL }
+
+        val totalPass = secPass + paramPass
+        val totalWarn = secWarn + paramWarn
+        val totalFail = secFail + paramFail
+        val totalChecks = checks.size + auditedIdentity.parameterStatuses.size
 
         var score = 100
-        score -= (failCount * 22)
-        score -= (warnCount * 7)
+        score -= (totalFail * 18)
+        score -= (totalWarn * 5)
         if (!playIntegrity.meetsDeviceIntegrity) score -= 15
         if (!playIntegrity.isPlayProtectCertified) score -= 10
         score = score.coerceIn(15, 100)
 
         val stealthLevel = when {
+            totalFail > 0 -> "Terdeteksi / Resiko Tinggi"
+            totalWarn > 2 -> "Waspada / Potensi Terdeteksi"
+            totalWarn > 0 -> "Waspada / Perlu Perhatian"
             score >= 85 -> "Aman / Stealth (Undetected)"
-            score >= 60 -> "Waspada / Potensi Terdeteksi"
-            else -> "Terdeteksi / Resiko Tinggi"
+            else -> "Waspada / Potensi Terdeteksi"
         }
 
         val recommendations = mutableListOf<String>()
-        if (failCount > 0) {
+        if (totalFail > 0) {
             recommendations.add("Sembunyikan biner root dan pastikan modul Zygisk / Shamiko mengisolasi aplikasi target.")
         }
         if (!playIntegrity.meetsDeviceIntegrity) {
             recommendations.add("Perbarui fingerprint modul PlayIntegrityFix agar lolos MEETS_DEVICE_INTEGRITY.")
         }
-        if (warnCount > 0) {
-            recommendations.add("Periksa konsistensi Build Props antara Codename dan Fingerprint.")
+        if (auditedIdentity.parameterStatuses["serial"] == CheckStatus.WARN) {
+            recommendations.add("Nomor seri (SerialNo) terdeteksi unknown. Set nomor seri alfanumerik via resetprop atau modul Zygisk.")
+        }
+        if (auditedIdentity.parameterStatuses["hidden_keyboards"] == CheckStatus.WARN) {
+            recommendations.add("Paket keyboard otomasi/debug terdeteksi. Copot pemasangan atau sembunyikan via Hide My Applist.")
+        }
+        if (totalWarn > 0 && recommendations.isEmpty()) {
+            recommendations.add("Terdapat $totalWarn parameter dalam kategori waspada yang disarankan untuk disempurnakan.")
         }
         if (recommendations.isEmpty()) {
             recommendations.add("Konfigurasi spoofing Anda saat ini sangat bersih dan konsisten.")
         }
 
+        val riskSummary = if (totalWarn > 0 || totalFail > 0) {
+            "Ditemukan $totalWarn parameter waspada dan $totalFail kebocoran. Ketuk indikator status atau daftar di bawah untuk panduan fix tuntas."
+        } else {
+            "Semua parameter lolos audit integritas. Tingkat keamanan spoofing: $stealthLevel ($score/100)."
+        }
+
         val spoofScore = SpoofAuditScore(
             overallScore = score,
             stealthLevel = stealthLevel,
-            totalChecks = checks.size,
-            passedCount = passCount,
-            warnCount = warnCount,
-            failCount = failCount,
-            riskSummary = "Tingkat keamanan spoofing: $stealthLevel ($score/100).",
+            totalChecks = totalChecks,
+            passedCount = totalPass,
+            warnCount = totalWarn,
+            failCount = totalFail,
+            riskSummary = riskSummary,
             recommendations = recommendations
         )
-
-        val auditedIdentity = collectDeviceIdentity(isAudited = true)
 
         return FullAuditReport(
             timestamp = System.currentTimeMillis(),
@@ -699,16 +757,43 @@ class SecurityAuditor(private val context: Context) {
 
     private fun detectHiddenKeyboards(): String {
         val detected = mutableListOf<String>()
-        val suspects = listOf("com.android.adbkeyboard", "io.appium.settings", "com.google.android.inputmethod.latin")
+        val suspects = listOf(
+            "com.android.adbkeyboard",
+            "io.appium.settings",
+            "com.github.uiautomator",
+            "com.prateekjain.adbkeyboard"
+        )
         for (pkg in suspects) {
             if (isPackageInstalled(pkg)) {
                 detected.add(pkg)
             }
         }
+        try {
+            val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
+            imm?.enabledInputMethodList?.forEach { imi ->
+                val pName = imi.packageName.lowercase()
+                if (pName.contains("adbkeyboard") || pName.contains("appium") || pName.contains("uiautomator")) {
+                    if (!detected.contains(imi.packageName)) {
+                        detected.add(imi.packageName)
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
         return if (detected.isNotEmpty()) {
             detected.joinToString(",")
         } else {
-            "com.android.adbkeyboard,io.appium.settings,com.google.android.inputmethod.latin"
+            "Tidak terdeteksi (Aman / Bersih)"
+        }
+    }
+
+    private fun getSystemProperty(key: String): String {
+        return try {
+            val c = Class.forName("android.os.SystemProperties")
+            val get = c.getMethod("get", String::class.java)
+            (get.invoke(c, key) as? String) ?: ""
+        } catch (_: Exception) {
+            ""
         }
     }
 }
