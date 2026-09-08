@@ -47,9 +47,17 @@ jobs:
         run: |
           echo "Memeriksa dan menyiapkan debug.keystore..."
           if [ -f "debug.keystore.base64" ]; then
-            base64 -d debug.keystore.base64 > debug.keystore
-            echo "debug.keystore berhasil di-decode."
+            tr -d '\r\n ' < debug.keystore.base64 | base64 -d > debug.keystore || true
+            echo "debug.keystore berhasil di-decode dari base64."
           fi
+
+          if [ ! -f "debug.keystore" ] || [ ! -s "debug.keystore" ]; then
+            echo "debug.keystore tidak ditemukan atau kosong. Membuat debug.keystore otomatis via keytool..."
+            keytool -genkeypair -alias androiddebugkey -keypass android -keystore debug.keystore -storepass android -dname "CN=Android Debug,O=Android,C=US" -keyalg RSA -keysize 2048 -validity 10000
+            echo "debug.keystore berhasil dibuat."
+          fi
+
+          ls -lh debug.keystore
 
           echo "Menyiapkan file .env untuk plugin Secrets Gradle..."
           if [ ! -f ".env" ]; then
