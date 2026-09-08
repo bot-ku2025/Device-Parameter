@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -24,17 +25,23 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeveloperMode
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -51,10 +58,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.CheckStatus
+import com.example.data.model.DangerousPathReport
 import com.example.data.model.FullAuditReport
 import com.example.data.model.PlayIntegrityReport
 import com.example.data.model.SecurityCategory
 import com.example.data.model.SecurityCheckItem
+import com.example.data.model.SpoofDepthAnalysis
+import com.example.data.model.SpoofLeakItem
 import com.example.ui.components.SecurityCheckDetailDialog
 import com.example.ui.components.StatusPill
 import com.example.ui.theme.SentinelBlue
@@ -80,6 +90,7 @@ fun ShieldScreen(
     var selectedCategoryFilter by remember { mutableStateOf<SecurityCategory?>(null) }
     var selectedStatusFilter by remember { mutableStateOf<CheckStatus?>(null) }
     var selectedCheckItem by remember { mutableStateOf<SecurityCheckItem?>(null) }
+    var selectedLeakItem by remember { mutableStateOf<SpoofLeakItem?>(null) }
 
     val checks = report?.securityChecks ?: emptyList()
     val passCount = checks.count { it.status == CheckStatus.PASS }
@@ -201,6 +212,14 @@ fun ShieldScreen(
                     }
                 }
             } else {
+                // Spoof Depth & Anti-Fraud Leak Scanner Card
+                SpoofDepthScannerCard(
+                    spoofDepth = report.spoofDepth,
+                    onInspectLeak = { selectedLeakItem = it }
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
                 // Play Integrity API Card
                 PlayIntegrityCard(playIntegrity = report.playIntegrity)
 
@@ -208,6 +227,11 @@ fun ShieldScreen(
 
                 // Kernel & Bootloader Summary Card
                 KernelBootloaderCard()
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Dangerous Folders & Root Paths Inspection Card
+                DangerousPathsAuditCard(report = report.dangerousPathReport)
 
                 Spacer(modifier = Modifier.height(18.dp))
 
@@ -354,6 +378,13 @@ fun ShieldScreen(
         SecurityCheckDetailDialog(
             item = selectedCheckItem!!,
             onDismiss = { selectedCheckItem = null }
+        )
+    }
+
+    if (selectedLeakItem != null) {
+        LeakDetailDialog(
+            leak = selectedLeakItem!!,
+            onDismiss = { selectedLeakItem = null }
         )
     }
 }
@@ -686,6 +717,534 @@ fun ExploitLogItemCard(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun SpoofDepthScannerCard(
+    spoofDepth: SpoofDepthAnalysis,
+    onInspectLeak: (SpoofLeakItem) -> Unit
+) {
+    val tierColor = when {
+        spoofDepth.depthScorePercent >= 85 -> StatusPass
+        spoofDepth.depthScorePercent >= 55 -> StatusWarn
+        else -> StatusFail
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(SentinelSurface)
+            .border(1.dp, SentinelCardBorder, RoundedCornerShape(14.dp))
+            .padding(16.dp)
+    ) {
+        Column {
+            // Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Layers,
+                        contentDescription = "Spoof Depth",
+                        tint = SentinelCyan,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column {
+                        Text(
+                            text = "Uji Kedalaman Spoof & Anti-Fraud",
+                            color = TextPrimary,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Audit Kebocoran Identitas Fisik (Multi-Akun)",
+                            color = TextSecondary,
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(tierColor.copy(alpha = 0.15f))
+                        .border(1.dp, tierColor.copy(alpha = 0.4f), RoundedCornerShape(6.dp))
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = "${spoofDepth.depthScorePercent}% DEEP",
+                        color = tierColor,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Multi-Account Verdict Banner
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(tierColor.copy(alpha = 0.15f), tierColor.copy(alpha = 0.05f))
+                        )
+                    )
+                    .border(1.dp, tierColor.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
+                    .padding(12.dp)
+            ) {
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = if (spoofDepth.depthScorePercent >= 85) Icons.Default.Check else Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = tierColor,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = spoofDepth.depthTier,
+                            color = tierColor,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = spoofDepth.multiAccountSafetyVerdict,
+                        color = TextPrimary,
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Potensi Deteksi Risk Engine: ${spoofDepth.antiFraudDetectionLikelihood}",
+                        color = tierColor,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Layer Breakdown Progress Bars
+            Text(
+                text = "Tingkat Penetrasi Lapisan Sistem:",
+                color = TextSecondary,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            LayerProgressItem(
+                label = "1. Surface Layer (Pengaturan & UI Telepon)",
+                percent = spoofDepth.surfaceScore
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+
+            LayerProgressItem(
+                label = "2. Vendor Props (Partisi ro.vendor.* & ro.boot)",
+                percent = spoofDepth.vendorPropsScore
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+
+            LayerProgressItem(
+                label = "3. Kernel & SoC Fisik (/proc/cpuinfo & Arsitektur)",
+                percent = spoofDepth.hardwareLeakScore
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+
+            LayerProgressItem(
+                label = "4. Cryptographic Trust (TEE & Play Integrity)",
+                percent = spoofDepth.integrityScore
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Detected Leaks Section
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Daftar Titik Kebocoran Identitas Asli (${spoofDepth.detectedLeaks.size})",
+                    color = TextPrimary,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = if (spoofDepth.detectedLeaks.isEmpty()) "0 Kebocoran" else "Ketuk untuk Fix",
+                    color = if (spoofDepth.detectedLeaks.isEmpty()) StatusPass else SentinelCyan,
+                    fontSize = 10.sp
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            if (spoofDepth.detectedLeaks.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(SentinelSurfaceVariant)
+                        .padding(12.dp)
+                ) {
+                    Text(
+                        text = "✓ Tidak ada kebocoran terdeteksi pada layer vendor dan hardware.",
+                        color = StatusPass,
+                        fontSize = 11.sp
+                    )
+                }
+            } else {
+                spoofDepth.detectedLeaks.forEach { leak ->
+                    LeakItemCard(
+                        leak = leak,
+                        onClick = { onInspectLeak(leak) }
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun LayerProgressItem(label: String, percent: Int) {
+    val color = when {
+        percent >= 80 -> StatusPass
+        percent >= 50 -> StatusWarn
+        else -> StatusFail
+    }
+
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(text = label, color = TextSecondary, fontSize = 10.sp)
+            Text(text = "$percent%", color = color, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        }
+        Spacer(modifier = Modifier.height(3.dp))
+        LinearProgressIndicator(
+            progress = { percent / 100f },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(4.dp)
+                .clip(RoundedCornerShape(2.dp)),
+            color = color,
+            trackColor = SentinelSurfaceVariant
+        )
+    }
+}
+
+@Composable
+fun LeakItemCard(
+    leak: SpoofLeakItem,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(SentinelSurfaceVariant)
+            .border(0.8.dp, StatusWarn.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(10.dp)
+    ) {
+        Column {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = leak.layer,
+                    color = SentinelCyan,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "BOCOR ↗",
+                    color = StatusFail,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(modifier = Modifier.height(3.dp))
+            Text(
+                text = leak.parameter,
+                color = TextPrimary,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Terspoof:", color = TextMuted, fontSize = 9.sp)
+                    Text(leak.spoofedValue, color = StatusPass, fontSize = 10.sp, fontWeight = FontWeight.Medium)
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Bocor Asli:", color = TextMuted, fontSize = 9.sp)
+                    Text(leak.leakedRealValue, color = StatusFail, fontSize = 10.sp, fontWeight = FontWeight.Medium)
+                }
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = "Ketuk untuk melihat dampak anti-fraud & solusi fix tuntas",
+                color = SentinelBlueLight,
+                fontSize = 9.sp
+            )
+        }
+    }
+}
+
+@Composable
+fun LeakDetailDialog(
+    leak: SpoofLeakItem,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = SentinelSurface,
+        title = {
+            Column {
+                Text(
+                    text = "Detail Titik Kebocoran Identitas",
+                    color = SentinelCyan,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = leak.parameter,
+                    color = TextPrimary,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        },
+        text = {
+            Column {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(SentinelSurfaceVariant)
+                        .padding(10.dp)
+                ) {
+                    Column {
+                        Text(text = "Layer Terdeteksi: ${leak.layer}", color = TextSecondary, fontSize = 11.sp)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(text = "Nilai Spoof: ${leak.spoofedValue}", color = StatusPass, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(text = "Nilai Asli Bocor: ${leak.leakedRealValue}", color = StatusFail, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text(
+                    text = "Dampak Pada Multi-Akun / Anti-Fraud:",
+                    color = StatusWarn,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = leak.riskImpact,
+                    color = TextPrimary,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Text(
+                    text = "Panduan Solusi Fix Tuntas:",
+                    color = SentinelCyan,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(SentinelDarkBg)
+                        .border(0.8.dp, SentinelCardBorder, RoundedCornerShape(8.dp))
+                        .padding(10.dp)
+                ) {
+                    Text(
+                        text = leak.fixSolution,
+                        color = SentinelBlueLight,
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace,
+                        lineHeight = 16.sp
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = SentinelCyan,
+                    contentColor = Color.Black
+                ),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("Tutup", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            }
+        }
+    )
+}
+
+@Composable
+fun DangerousPathsAuditCard(report: DangerousPathReport) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = SentinelSurface),
+        border = BorderStroke(1.dp, if (!report.hasDanger) SentinelCardBorder else StatusFail.copy(alpha = 0.5f))
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = if (!report.hasDanger) StatusPass else StatusFail,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Audit Folder & Mount Berbahaya",
+                        color = TextPrimary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(if (!report.hasDanger) StatusPass.copy(alpha = 0.15f) else StatusFail.copy(alpha = 0.15f))
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = if (!report.hasDanger) "TERISOLASI (PASS)" else "BOCOR (${report.foundFolders.size + report.foundBinaries.size + report.foundMountLeaks.size})",
+                        color = if (!report.hasDanger) StatusPass else StatusFail,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = if (!report.hasDanger)
+                    "Semua folder root (/data/adb, Magisk, KSU, APatch), biner su/busybox, dan tabel mount virtual (/proc/mounts) terisolasi bersih dari deteksi anti-tamper."
+                else "Terdeteksi jejak fisik root atau partisi virtual kernel yang dapat terbaca oleh aplikasi target tanpa izin root!",
+                color = if (!report.hasDanger) TextSecondary else StatusWarn,
+                fontSize = 11.sp,
+                lineHeight = 15.sp
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                MiniAuditPathStatus(
+                    title = "Folder Root",
+                    target = "/data/adb /sbin",
+                    isClean = report.foundFolders.isEmpty(),
+                    detectedCount = report.foundFolders.size,
+                    modifier = Modifier.weight(1f)
+                )
+
+                MiniAuditPathStatus(
+                    title = "Biner Eksekusi",
+                    target = "su / busybox",
+                    isClean = report.foundBinaries.isEmpty(),
+                    detectedCount = report.foundBinaries.size,
+                    modifier = Modifier.weight(1f)
+                )
+
+                MiniAuditPathStatus(
+                    title = "Tabel Mount",
+                    target = "/proc/mounts",
+                    isClean = report.foundMountLeaks.isEmpty(),
+                    detectedCount = report.foundMountLeaks.size,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            if (report.hasDanger) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0x22FF5252))
+                        .padding(8.dp)
+                ) {
+                    Text(
+                        text = "Rekomendasi Fix: Pasang modul Shamiko (Zygisk) atau aktifkan 'Mount Namespace Isolation' pada KernelSU/APatch agar path ini tidak dapat dibaca oleh aplikasi perbankan/e-commerce.",
+                        color = Color(0xFFFF8A80),
+                        fontSize = 10.sp,
+                        lineHeight = 14.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MiniAuditPathStatus(
+    title: String,
+    target: String,
+    isClean: Boolean,
+    detectedCount: Int,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(SentinelDarkBg)
+            .border(0.8.dp, if (isClean) SentinelCardBorder else StatusFail.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+            .padding(8.dp)
+    ) {
+        Column {
+            Text(text = title, color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            Text(text = target, color = TextMuted, fontSize = 9.sp, maxLines = 1)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = if (isClean) "Bersih" else "$detectedCount Bocor",
+                color = if (isClean) StatusPass else StatusFail,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold
+            )
         }
     }
 }

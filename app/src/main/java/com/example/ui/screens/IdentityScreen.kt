@@ -73,6 +73,7 @@ import com.example.ui.components.DiagnosticDetailDialog
 import com.example.ui.components.IdentityFieldCard
 import com.example.ui.components.StatusPill
 import com.example.ui.theme.SentinelBlue
+import com.example.ui.theme.SentinelBlueLight
 import com.example.ui.theme.SentinelCardBorder
 import com.example.ui.theme.SentinelCyan
 import com.example.ui.theme.SentinelDarkBg
@@ -146,6 +147,91 @@ fun IdentityScreen(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
+
+            // Spoof Synchronization Banner
+            if (identity.isSpoofed) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(Color(0xFF0D2538), Color(0xFF091724))
+                            )
+                        )
+                        .border(1.dp, SentinelCyan.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+                        .padding(14.dp)
+                ) {
+                    Column {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = null,
+                                    tint = SentinelCyan,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "SINKRON DENGAN PENGATURAN TELEPON",
+                                    color = SentinelCyan,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 0.5.sp
+                                )
+                            }
+                            Text(
+                                text = "SPOOF AKTIF",
+                                color = StatusPass,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Identitas Terbaca: ${identity.brand} ${identity.model} (${identity.techModel})",
+                            color = TextPrimary,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        if (identity.baseHardwareInfo.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = identity.baseHardwareInfo,
+                                color = TextMuted,
+                                fontSize = 11.sp
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = identity.spoofDetectionDetail,
+                            color = SentinelBlueLight,
+                            fontSize = 11.sp
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0x3000E5FF))
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = "🛡️ Cek Tab Shield untuk Audit Ekstrem (Anti-Fraud Leak Scanner, /proc/cpuinfo, ro.vendor, & Play Integrity).",
+                                color = SentinelCyan,
+                                fontSize = 10.sp,
+                                lineHeight = 14.sp
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+            }
 
             // Audit Status Banner
             Box(

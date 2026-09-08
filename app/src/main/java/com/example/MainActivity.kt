@@ -19,10 +19,12 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.Assessment
 import androidx.compose.material.icons.outlined.Badge
 import androidx.compose.material.icons.outlined.History
@@ -55,6 +57,7 @@ import com.example.ui.screens.HistoryScreen
 import com.example.ui.screens.IdentityScreen
 import com.example.ui.screens.OverviewScreen
 import com.example.ui.screens.ShieldScreen
+import com.example.ui.screens.TargetAppAuditScreen
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.theme.SentinelCyan
 import com.example.ui.theme.SentinelDarkBg
@@ -69,6 +72,7 @@ enum class DeviceParameterTab(
 ) {
     OVERVIEW("Dasbor", Icons.Default.Assessment, Icons.Outlined.Assessment),
     SHIELD("Shield", Icons.Default.Security, Icons.Outlined.Security),
+    TARGET("Target App", Icons.Default.Apps, Icons.Outlined.Apps),
     IDENTITY("Parameter", Icons.Default.Badge, Icons.Outlined.Badge),
     HISTORY("Riwayat", Icons.Default.History, Icons.Outlined.History)
 }
@@ -96,6 +100,10 @@ fun DeviceParameterApp(viewModel: SentinelViewModel = viewModel()) {
     val latestReport by viewModel.latestReport.collectAsStateWithLifecycle()
     val anomalyAlertsEnabled by viewModel.anomalyAlertsEnabled.collectAsStateWithLifecycle()
     val historyLogs by viewModel.historyLogs.collectAsStateWithLifecycle()
+    val installedApps by viewModel.installedApps.collectAsStateWithLifecycle()
+    val selectedPackages by viewModel.selectedPackageNames.collectAsStateWithLifecycle()
+    val targetAuditState by viewModel.targetAuditState.collectAsStateWithLifecycle()
+    val latestTargetSession by viewModel.latestTargetSession.collectAsStateWithLifecycle()
 
     // Request notification permission on Android 13+
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
@@ -179,13 +187,27 @@ fun DeviceParameterApp(viewModel: SentinelViewModel = viewModel()) {
                         anomalyAlertsEnabled = anomalyAlertsEnabled,
                         onStartAudit = { viewModel.startDeepAudit() },
                         onToggleAnomalyAlerts = { viewModel.toggleAnomalyAlerts() },
-                        onNavigateToShield = { currentTab = DeviceParameterTab.SHIELD }
+                        onNavigateToShield = { currentTab = DeviceParameterTab.SHIELD },
+                        identity = identity
                     )
                 }
                 DeviceParameterTab.SHIELD -> {
                     ShieldScreen(
                         report = latestReport,
                         onTriggerAudit = { viewModel.startDeepAudit() }
+                    )
+                }
+                DeviceParameterTab.TARGET -> {
+                    TargetAppAuditScreen(
+                        installedApps = installedApps,
+                        selectedPackages = selectedPackages,
+                        targetAuditState = targetAuditState,
+                        latestSession = latestTargetSession,
+                        onToggleAppSelection = { pkg -> viewModel.toggleAppSelection(pkg) },
+                        onSelectAllFiltered = { pkgs -> viewModel.selectAllFiltered(pkgs) },
+                        onClearSelection = { viewModel.clearSelectedApps() },
+                        onRunAudit = { viewModel.runTargetAppAudit() },
+                        onRefreshApps = { viewModel.loadInstalledApps() }
                     )
                 }
                 DeviceParameterTab.IDENTITY -> {

@@ -80,6 +80,9 @@ data class DeviceIdentity(
     val virtualDefaultIme: String = "",
     val nearbyBtName: String = "",
     val nearbyBtAddress: String = "",
+    val isSpoofed: Boolean = false,
+    val spoofDetectionDetail: String = "",
+    val baseHardwareInfo: String = "",
     val parameterStatuses: Map<String, CheckStatus> = emptyMap(),
     val diagnostics: Map<String, ParameterDiagnostic> = emptyMap()
 )
@@ -104,11 +107,42 @@ data class SpoofAuditScore(
     val recommendations: List<String> = emptyList()
 )
 
+data class SpoofLeakItem(
+    val layer: String,
+    val parameter: String,
+    val spoofedValue: String,
+    val leakedRealValue: String,
+    val riskImpact: String,
+    val fixSolution: String
+)
+
+data class SpoofDepthAnalysis(
+    val depthScorePercent: Int = 0,
+    val depthTier: String = "Surface Only",
+    val surfaceScore: Int = 100,
+    val vendorPropsScore: Int = 100,
+    val hardwareLeakScore: Int = 100,
+    val integrityScore: Int = 100,
+    val detectedLeaks: List<SpoofLeakItem> = emptyList(),
+    val multiAccountSafetyVerdict: String = "",
+    val antiFraudDetectionLikelihood: String = "Tinggi (Mudah Dideteksi SDK Risk)"
+)
+
+data class DangerousPathReport(
+    val foundFolders: List<String> = emptyList(),
+    val foundBinaries: List<String> = emptyList(),
+    val foundMountLeaks: List<String> = emptyList()
+) {
+    val hasDanger: Boolean get() = foundFolders.isNotEmpty() || foundBinaries.isNotEmpty() || foundMountLeaks.isNotEmpty()
+}
+
 data class FullAuditReport(
     val timestamp: Long = System.currentTimeMillis(),
     val identity: DeviceIdentity = DeviceIdentity(),
     val hardwareStats: DeviceHardwareStats = DeviceHardwareStats(),
     val securityChecks: List<SecurityCheckItem> = emptyList(),
     val playIntegrity: PlayIntegrityReport = PlayIntegrityReport(),
-    val score: SpoofAuditScore = SpoofAuditScore()
+    val score: SpoofAuditScore = SpoofAuditScore(),
+    val spoofDepth: SpoofDepthAnalysis = SpoofDepthAnalysis(),
+    val dangerousPathReport: DangerousPathReport = DangerousPathReport()
 )

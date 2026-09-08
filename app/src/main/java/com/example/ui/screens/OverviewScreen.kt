@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.CheckStatus
 import com.example.data.model.DeviceHardwareStats
+import com.example.data.model.DeviceIdentity
 import com.example.data.model.FullAuditReport
 import com.example.data.model.ParameterDiagnostic
 import com.example.data.model.SecurityCheckItem
@@ -85,6 +86,7 @@ fun OverviewScreen(
     onStartAudit: () -> Unit,
     onToggleAnomalyAlerts: () -> Unit,
     onNavigateToShield: () -> Unit,
+    identity: DeviceIdentity = DeviceIdentity(),
     modifier: Modifier = Modifier
 ) {
     val scrollState = rememberScrollState()
@@ -129,6 +131,74 @@ fun OverviewScreen(
         }
 
         Spacer(modifier = Modifier.height(16.dp))
+
+        // Active Device & Spoof Info Banner
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(
+                    brush = if (identity.isSpoofed)
+                        Brush.verticalGradient(listOf(Color(0xFF0D2538), Color(0xFF091724)))
+                    else
+                        Brush.verticalGradient(listOf(SentinelSurface, SentinelSurface))
+                )
+                .border(
+                    1.dp,
+                    if (identity.isSpoofed) SentinelCyan.copy(alpha = 0.5f) else SentinelCardBorder,
+                    RoundedCornerShape(14.dp)
+                )
+                .padding(14.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = if (identity.brand.isNotEmpty()) "${identity.brand} ${identity.model}" else "Memuat Identitas...",
+                        color = TextPrimary,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Text(
+                        text = if (identity.isSpoofed) "Sinkron Pengaturan Telepon (${identity.techModel})" else "Mode Hardware Standar (${identity.techModel})",
+                        color = if (identity.isSpoofed) SentinelCyan else TextSecondary,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    if (identity.baseHardwareInfo.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = identity.baseHardwareInfo,
+                            color = TextMuted,
+                            fontSize = 10.sp
+                        )
+                    }
+                }
+
+                if (identity.isSpoofed) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(StatusPass.copy(alpha = 0.15f))
+                            .border(1.dp, StatusPass.copy(alpha = 0.4f), RoundedCornerShape(6.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "SPOOFED",
+                            color = StatusPass,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
 
         // Realtime Hardware Analytics Card
         Box(

@@ -9,9 +9,12 @@ import com.example.data.db.SentinelDatabase
 import com.example.data.model.DeviceHardwareStats
 import com.example.data.model.DeviceIdentity
 import com.example.data.model.FullAuditReport
+import com.example.data.model.InstalledAppInfo
+import com.example.data.model.MultiAppAuditSession
 import com.example.util.HardwareMonitor
 import com.example.util.NotificationHelper
 import com.example.util.SecurityAuditor
+import com.example.util.TargetAppAuditor
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,11 +31,18 @@ sealed class AuditScanState {
     data class Completed(val report: FullAuditReport) : AuditScanState()
 }
 
+sealed class TargetAuditState {
+    object Idle : TargetAuditState()
+    data class Running(val progress: Float, val stage: String) : TargetAuditState()
+    data class Done(val session: MultiAppAuditSession) : TargetAuditState()
+}
+
 class SentinelViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository: AuditRepository
     private val hardwareMonitor = HardwareMonitor(application)
     private val securityAuditor = SecurityAuditor(application)
+    private val targetAppAuditor = TargetAppAuditor(application)
 
     private val _hardwareStats = MutableStateFlow(DeviceHardwareStats())
     val hardwareStats: StateFlow<DeviceHardwareStats> = _hardwareStats.asStateFlow()
@@ -48,6 +58,19 @@ class SentinelViewModel(application: Application) : AndroidViewModel(application
 
     private val _anomalyAlertsEnabled = MutableStateFlow(true)
     val anomalyAlertsEnabled: StateFlow<Boolean> = _anomalyAlertsEnabled.asStateFlow()
+
+    // Target Engine States
+    private val _installedApps = MutableStateFlow<List<InstalledAppInfo>>(emptyList())
+    val installedApps: StateFlow<List<InstalledAppInfo>> = _installedApps.asStateFlow()
+
+    private val _selectedPackageNames = MutableStateFlow<Set<String>>(emptySet())
+    val selectedPackageNames: StateFlow<Set<String>> = _selectedPackageNames.asStateFlow()
+
+    private val _targetAuditState = MutableStateFlow<TargetAuditState>(TargetAuditState.Idle)
+    val targetAuditState: StateFlow<TargetAuditState> = _targetAuditState.asStateFlow()
+
+    private val _latestTargetSession = MutableStateFlow<MultiAppAuditSession?>(null)
+    val latestTargetSession: StateFlow<MultiAppAuditSession?> = _latestTargetSession.asStateFlow()
 
     private var lastAnomalyNotificationTime = 0L
     private var monitorJob: Job? = null
@@ -67,6 +90,9 @@ class SentinelViewModel(application: Application) : AndroidViewModel(application
 
         // Load initial device parameters
         _identity.value = securityAuditor.collectDeviceIdentity()
+
+        // Load installed apps
+        loadInstalledApps()
 
         // Start realtime hardware monitor loop
         startHardwareMonitor()
@@ -164,6 +190,58 @@ class SentinelViewModel(application: Application) : AndroidViewModel(application
     fun clearAllHistory() {
         viewModelScope.launch {
             repository.clearHistory()
+        }
+    }
+
+    fun loadInstalledApps() {
+        viewModelScope.launch {
+            val apps = targetAppAuditor.getInstalledApps()
+            _installedApps.value = apps
+            // Auto-select risk targets initially if empty
+            if (_selectedPackageNames.value.isEmpty()) {
+                val defaultSelected = apps.filter { it.isRiskTarget }.take(3).map { it.packageName }.toSet()
+                _selectedPackageNames.value = defaultSelected
+            }
+        }
+    }
+
+    fun toggleAppSelection(packageName: String) {
+        val current = _selectedPackageNames.value.toMutableSet()
+        if (current.contains(packageName)) {
+            current.remove(packageName)
+        } else {
+            current.add(packageName)
+        }
+        _selectedPackageNames.value = current
+    }
+
+    fun selectAllFiltered(packageNames: List<String>) {
+        val current = _selectedPackageNames.value.toMutableSet()
+        current.addAll(packageNames)
+        _selectedPackageNames.value = current
+    }
+
+    fun clearSelectedApps() {
+        _selectedPackageNames.value = emptySet()
+    }
+
+    fun runTargetAppAudit() {
+        val selected = _selectedPackageNames.value.toList()
+        if (selected.isEmpty() || _targetAuditState.value is TargetAuditState.Running) return
+
+        viewModelScope.launch {
+            _targetAuditState.value = TargetAuditState.Running(0.15f, "Menghubungkan ke Cloud Network Intelligence...")
+            delay(500)
+            _targetAuditState.value = TargetAuditState.Running(0.40f, "Memeriksa IP Publik, DNS & Risiko Clustering Subnet...")
+            delay(600)
+            _targetAuditState.value = TargetAuditState.Running(0.70f, "Mencocokkan signature anti-fraud ${selected.size} aplikasi target...")
+            delay(700)
+            _targetAuditState.value = TargetAuditState.Running(0.90f, "Menguji kebocoran direktori /sdcard/TWRP & /proc/mounts...")
+            delay(500)
+
+            val session = targetAppAuditor.auditSelectedApps(selected, _identity.value)
+            _latestTargetSession.value = session
+            _targetAuditState.value = TargetAuditState.Done(session)
         }
     }
 }
