@@ -31,33 +31,63 @@ enum class TargetEngineType(
         "ThreatMetrix (LexisNexis), AppsFlyer, Mount Namespace Scan, Su Binary Probe",
         "Proteksi Transaksi, Login Multi-Akun & Kupon Diskon"
     ),
-    BYTEDANCE_VIDEO(
-        "ByteDance Security Guardian",
-        "ByteDance In-house Sec, GAID Tracking, Wi-Fi BSSID Clustering, Hardware Device ID",
-        "Nonton Drama / Koin Reward / Anti Multi-Device Ban"
+    SHORT_DRAMA_REWARD(
+        "Short Drama & Video Reward Engine",
+        "ByteDance/Tencent Video Sec, GAID Tracking, Subnet Clustering, Watch-Time Bot Guard",
+        "Nonton Drama Koin, Event Tugas Harian & Anti-Shadowban"
+    ),
+    REWARD_GAME(
+        "Game Koin & Reward Anti-Bot Engine",
+        "Unity Fraud Guard, In-House Bot Detection, Auto-Clicker Sensor, Device ID Clustering",
+        "Klaim Saldo Koin, Nonton Iklan Reward & Anti Multi-Akun Ban"
+    ),
+    RETAIL_LOYALTY(
+        "Minimarket & Retail Loyalty Shield",
+        "Alfagift/Indomaret Member Guard, Mock GPS Detector, Multi-Akun Voucher Kasir",
+        "Klaim Voucher Belanja Gratis, Poin Member & Scan Barcode Kasir"
     ),
     FINANCIAL_BANKING(
-        "Bank & E-Wallet Shield",
-        "Hardware Play Integrity, RootBeer, Frida/Xposed Hook, Accessibility Scanner",
+        "Bank & E-Wallet Security Shield",
+        "Hardware Play Integrity, RootBeer, Frida/Xposed Hook, Accessibility Guard",
         "Proteksi Saldo Finansial & Pembayaran E-Wallet"
+    ),
+    GOOGLE_ECOSYSTEM(
+        "Google Ecosystem & AI Integrity",
+        "Google DroidGuard, GSF ID Verification, Play Protect SafetyNet, Webview Sandbox",
+        "Otentikasi Akun Google, AI Assistant & Layanan Cloud Sync"
+    ),
+    HARDWARE_UTILITY(
+        "Hardware Benchmark & Sensor Diagnostics",
+        "Direct Kernel /sys/class/ Reading, Thermal Sensors, Battery Raw Probing",
+        "Pengukuran Tegangan, Suhu Baterai & Diagnostik SoC"
     ),
     RIDE_HAILING(
         "Ojol / Logistik Location Shield",
         "Mock Location Detection, Developer Options, Fused Location Provider Bypass",
-        "Deteksi GPS Palsu / Fake GPS Tuyul"
+        "Deteksi GPS Palsu / Fake GPS Tuyul & Order Gacor"
+    ),
+    SOCIAL_MESSAGING(
+        "Media Sosial & Chat Multi-Akun",
+        "Device Fingerprint Ban, IP Subnet Rate Limiter, Multi-Account Session Clustering",
+        "Login Banyak Akun Chat, Anti-Spam & Broadcast Otomatis"
     ),
     GENERIC_COMMERCE(
         "E-Commerce & Marketplaces",
         "AppsFlyer, Device ID Cloning Check, Root & Busybox Basic Scans",
         "Multi-Akun Belanja & Pendaftaran Akun Baru"
     ),
-    ENTERTAINMENT_GAME(
-        "Game & Social Media Anti-Cheat",
-        "Hardware Device Ban, Multiple Accounts Limiter, Emulation Sandbox Check",
-        "Multi-Akun Nonton/Game & Anti-Banned Perangkat"
+    COMPETITIVE_GAME(
+        "Game Online & Anti-Cheat Shield",
+        "Hardware Device Ban, Memory Tamper Guard, Emulation Sandbox Check",
+        "Multi-Akun Game, Anti-Banned Perangkat & Keamanan Akun"
+    ),
+    GENERAL_APP(
+        "Aplikasi Produktivitas & Standar",
+        "Android Standard Sandbox, Storage Access Framework",
+        "Penggunaan Normal & Stabilitas Aplikasi"
     ),
     SYSTEM_SERVICE(
-        "Layanan Sistem Android",
+        "Layanan Sistem Android OS",
         "Android OS Internal Component",
         "Stabilitas & Kompatibilitas Framework"
     )

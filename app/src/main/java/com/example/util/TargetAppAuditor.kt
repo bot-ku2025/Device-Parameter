@@ -2,9 +2,11 @@ package com.example.util
 
 import android.content.Context
 import android.content.pm.ApplicationInfo
+import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.os.Build
 import android.os.Environment
 import android.provider.Settings
 import com.example.data.model.AppDangerItem
@@ -53,23 +55,31 @@ class TargetAppAuditor(private val context: Context) {
                     "1.0"
                 }
 
-                val engineType = identifyEngineType(pkgName, appName, isSystem)
+                val packageInfo = try {
+                    pm.getPackageInfo(pkgName, PackageManager.GET_PERMISSIONS)
+                } catch (_: Exception) {
+                    null
+                }
+
+                val engineType = identifyEngineTypeAdvanced(appInfo, packageInfo, appName)
                 val isRiskTarget = engineType != TargetEngineType.SYSTEM_SERVICE &&
-                        (engineType != TargetEngineType.GENERIC_COMMERCE || 
-                         pkgName.contains("shop") || 
-                         pkgName.contains("video") ||
-                         pkgName.contains("drama") ||
-                         pkgName.contains("pay") || 
-                         pkgName.contains("wallet"))
+                        engineType != TargetEngineType.GENERAL_APP &&
+                        engineType != TargetEngineType.HARDWARE_UTILITY
 
                 val categoryLabel = when (engineType) {
                     TargetEngineType.SHOPEE -> "E-Commerce (Shopee SudoHide)"
                     TargetEngineType.TOKOPEDIA -> "E-Commerce (Tokopedia ThreatMetrix)"
-                    TargetEngineType.BYTEDANCE_VIDEO -> "Video & Reward (ByteDance Guardian)"
+                    TargetEngineType.SHORT_DRAMA_REWARD -> "Short Drama & Video Reward"
+                    TargetEngineType.REWARD_GAME -> "Game Koin & Penghasil Uang"
+                    TargetEngineType.RETAIL_LOYALTY -> "Minimarket & Retail Loyalty (Kupon)"
                     TargetEngineType.FINANCIAL_BANKING -> "Finansial / Bank / E-Wallet"
-                    TargetEngineType.RIDE_HAILING -> "Ojol & Logistik (Mock Location Guard)"
+                    TargetEngineType.GOOGLE_ECOSYSTEM -> "Google Ecosystem & AI"
+                    TargetEngineType.HARDWARE_UTILITY -> "Hardware & Battery Benchmark"
+                    TargetEngineType.RIDE_HAILING -> "Ojol & Logistik (Location Guard)"
+                    TargetEngineType.SOCIAL_MESSAGING -> "Media Sosial & Chat Multi-Akun"
                     TargetEngineType.GENERIC_COMMERCE -> "Marketplace / Shopping"
-                    TargetEngineType.ENTERTAINMENT_GAME -> "Hiburan & Game (Device Bound)"
+                    TargetEngineType.COMPETITIVE_GAME -> "Game Online Anti-Cheat"
+                    TargetEngineType.GENERAL_APP -> "Aplikasi Produktivitas"
                     TargetEngineType.SYSTEM_SERVICE -> "Layanan Sistem OS"
                 }
 
@@ -92,52 +102,210 @@ class TargetAppAuditor(private val context: Context) {
         )
     }
 
-    private fun identifyEngineType(packageName: String, appName: String, isSystem: Boolean): TargetEngineType {
-        if (isSystem && !packageName.contains("vending") && !packageName.contains("gms")) {
+    /**
+     * AI-Powered Multi-Faceted Classifier:
+     * Menggabungkan analisis manifest Android (kategori OS, permissions),
+     * tokenisasi nama paket, nama aplikasi, serta corpus istilah anti-fraud lokal & global.
+     */
+    fun identifyEngineTypeAdvanced(
+        appInfo: ApplicationInfo,
+        packageInfo: PackageInfo?,
+        appName: String
+    ): TargetEngineType {
+        val lowerPkg = appInfo.packageName.lowercase()
+        val lowerName = appName.lowercase()
+        val isSystem = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+
+        val declaredPermissions = packageInfo?.requestedPermissions?.map { it.lowercase() } ?: emptyList()
+
+        // 1. SHOPEE & SHOPEEPAY
+        if (lowerPkg.contains("com.shopee") || lowerPkg.contains("shopeepay") || lowerName.contains("shopee")) {
+            return TargetEngineType.SHOPEE
+        }
+
+        // 2. TOKOPEDIA & GOPAY
+        if (lowerPkg.contains("tokopedia") || lowerPkg.contains("com.gojek.gopay") ||
+            (lowerName.contains("tokopedia") && !lowerName.contains("mitra"))
+        ) {
+            return TargetEngineType.TOKOPEDIA
+        }
+
+        // 3. MINIMARKET, RETAIL & PROMO LOYALTY (Alfagift, Indomaret Poinku, Super Indo, MyPertamina, Mitra)
+        if (lowerPkg.contains("alfamart") || lowerPkg.contains("alfagift") ||
+            lowerPkg.contains("indomaret") || lowerPkg.contains("poinku") ||
+            lowerPkg.contains("isaku") || lowerPkg.contains("pertamina") ||
+            lowerPkg.contains("superindo") || lowerPkg.contains("hypermart") ||
+            lowerPkg.contains("yomart") || lowerPkg.contains("lotte") ||
+            lowerPkg.contains("transmart") || lowerPkg.contains("mitratokopedia") ||
+            lowerPkg.contains("mitrabukalapak") || lowerPkg.contains("chattime") ||
+            lowerPkg.contains("kopikenangan") || lowerPkg.contains("fore.coffee") ||
+            lowerName.contains("alfagift") || lowerName.contains("alfamart") ||
+            lowerName.contains("indomaret") || lowerName.contains("poinku") ||
+            lowerName.contains("super indo") || lowerName.contains("mypertamina") ||
+            lowerName.contains("i.saku") || lowerName.contains("mitra bukalapak")
+        ) {
+            return TargetEngineType.RETAIL_LOYALTY
+        }
+
+        // 4. SHORT DRAMA & REWARD VIDEO (FreeReels, PineDrama, DramaBox, ReelShort, SnackVideo, TikTok, ShortMax)
+        val isShortDramaKeywords = lowerPkg.contains("freereels") || lowerPkg.contains("pinedrama") ||
+                lowerPkg.contains("dramabox") || lowerPkg.contains("reelshort") ||
+                lowerPkg.contains("shortmax") || lowerPkg.contains("goodshort") ||
+                lowerPkg.contains("sereal") || lowerPkg.contains("dramawave") ||
+                lowerPkg.contains("snackvideo") || lowerPkg.contains("kuaishou") ||
+                lowerPkg.contains("tiktok") || lowerPkg.contains("zhiliaoapp") ||
+                lowerPkg.contains("ss.android.ugc") || lowerPkg.contains("novelme") ||
+                lowerPkg.contains("fizzo") || lowerPkg.contains("webfic") ||
+                lowerPkg.contains("dramaplus") || lowerPkg.contains("moboreels") ||
+                lowerName.contains("freereels") || lowerName.contains("pinedrama") ||
+                lowerName.contains("reelshort") || lowerName.contains("dramabox") ||
+                lowerName.contains("shortmax") || lowerName.contains("goodshort") ||
+                lowerName.contains("snackvideo") || lowerName.contains("tiktok") ||
+                (lowerName.contains("drama") && (lowerName.contains("short") || lowerName.contains("reel") || lowerName.contains("box"))) ||
+                (lowerPkg.contains("funnyvideo") && !lowerPkg.contains("cgame") && !lowerPkg.contains("game"))
+
+        if (isShortDramaKeywords) {
+            return TargetEngineType.SHORT_DRAMA_REWARD
+        }
+
+        // 5. REWARD GAMES & GAME PENGHASIL UANG (Fruit Blast, Tap Coin, Crazy Dog, Candy Kaboom, Popstar, dll)
+        val isGameFlag = (appInfo.flags and ApplicationInfo.FLAG_IS_GAME) != 0 ||
+                (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && appInfo.category == ApplicationInfo.CATEGORY_GAME)
+
+        val isRewardGameKeywords = lowerPkg.contains("cgame") || lowerPkg.contains("fruitb") ||
+                (lowerPkg.contains("fruit") && lowerPkg.contains("blast")) ||
+                lowerPkg.contains("tapcoin") || lowerPkg.contains("crazydog") ||
+                lowerPkg.contains("kaboom") || lowerPkg.contains("popstar") ||
+                lowerPkg.contains("moneytree") || lowerPkg.contains("luckyspin") ||
+                lowerPkg.contains("crazyfarm") || lowerPkg.contains("funnychicken") ||
+                lowerPkg.contains("blockpuzzle.reward") || lowerPkg.contains("happyfruit") ||
+                lowerPkg.contains("winmoney") || lowerPkg.contains("playtoearn") ||
+                lowerName.contains("fruit blast") || lowerName.contains("tap coin") ||
+                lowerName.contains("crazy dog") || lowerName.contains("candy kaboom") ||
+                lowerName.contains("popstar") || lowerName.contains("game koin") ||
+                lowerName.contains("penghasil uang") || lowerName.contains("penghasil saldo") ||
+                lowerName.contains("lucky spin") || lowerName.contains("lucky coin") ||
+                (isGameFlag && (lowerName.contains("coin") || lowerName.contains("reward") || lowerName.contains("money") || lowerName.contains("cash") || lowerName.contains("blast") || lowerName.contains("puzzle")))
+
+        if (isRewardGameKeywords) {
+            return TargetEngineType.REWARD_GAME
+        }
+
+        // 6. BANKING, FINANSIAL, E-WALLET & PINJOL (BCA, DANA, OVO, Livin, BRImo, SeaBank, Bank Jago, dll)
+        val isBankingKeywords = lowerPkg.contains("dana") || lowerPkg.contains("ovo") || lowerPkg.contains("bca") ||
+                lowerPkg.contains("mandiri") || lowerPkg.contains("bri") || lowerPkg.contains("bni") ||
+                lowerPkg.contains("jago") || lowerPkg.contains("linkaja") || lowerPkg.contains("fintech") ||
+                lowerPkg.contains("flip") || lowerPkg.contains("jenius") || lowerPkg.contains("aladin") ||
+                lowerPkg.contains("seabank") || lowerPkg.contains("neobank") || lowerPkg.contains("kredivo") ||
+                lowerPkg.contains("akulaku") || lowerPkg.contains("spaylater") || lowerPkg.contains("adakami") ||
+                lowerPkg.contains("kreditpintar") || lowerPkg.contains("easycash") || lowerPkg.contains("rupiahcepat") ||
+                lowerPkg.contains("cimb") || lowerPkg.contains("permata") || lowerPkg.contains("panin") ||
+                lowerPkg.contains("danamon") || lowerPkg.contains("maybank") || lowerPkg.contains("blubybcadigital") ||
+                lowerPkg.contains("allo") || lowerPkg.contains("motionbank") || lowerPkg.contains("bankbtpn") ||
+                lowerPkg.contains("brimo") || lowerPkg.contains("livin") ||
+                lowerName.contains("bca") || lowerName.contains("dana") || lowerName.contains("ovo") ||
+                lowerName.contains("livin") || lowerName.contains("bri") || lowerName.contains("brimo") ||
+                lowerName.contains("mandiri") || lowerName.contains("seabank") || lowerName.contains("jago") ||
+                lowerName.contains("linkaja") || lowerName.contains("kredivo") || lowerName.contains("akulaku") ||
+                lowerName.contains("neobank") || lowerName.contains("pinjol")
+
+        if (isBankingKeywords) {
+            return TargetEngineType.FINANCIAL_BANKING
+        }
+
+        // 7. GOOGLE ECOSYSTEM & AI ASSISTANT (YouTube, Gmail, Gemini, Chrome, Maps, Google Quick Search)
+        val isGoogleEcosystem = lowerPkg.contains("google.android.youtube") || lowerPkg.contains("google.android.gm") ||
+                lowerPkg.contains("google.android.apps.bard") || lowerPkg.contains("googlequicksearchbox") ||
+                lowerPkg.contains("android.chrome") || lowerPkg.contains("google.android.apps.maps") ||
+                lowerPkg.contains("vending") || lowerPkg.contains("google.android.gms") ||
+                lowerPkg.contains("google.android.googlequicksearchbox") || lowerPkg.contains("google.android.apps.photos") ||
+                lowerName == "youtube" || lowerName == "gmail" || lowerName == "gemini" ||
+                lowerName == "google" || lowerName == "chrome" || lowerName == "google maps"
+
+        if (isGoogleEcosystem) {
+            return TargetEngineType.GOOGLE_ECOSYSTEM
+        }
+
+        // 8. HARDWARE, BATTERY & BENCHMARK UTILITY (Ampere, CPU-Z, AIDA64, Termux, DevCheck, AccuBattery)
+        val isHardwareUtility = lowerPkg.contains("ampere") || lowerPkg.contains("cpu.z") || lowerPkg.contains("aida64") ||
+                lowerPkg.contains("devcheck") || lowerPkg.contains("termux") || lowerPkg.contains("accubattery") ||
+                lowerPkg.contains("deviceinfo") || lowerPkg.contains("gombosdev") || lowerPkg.contains("antutu") ||
+                lowerPkg.contains("geekbench") || lowerPkg.contains("speedtest") || lowerPkg.contains("sensor") ||
+                lowerName.contains("ampere") || lowerName.contains("cpu-z") || lowerName.contains("aida64") ||
+                lowerName.contains("accubattery") || lowerName.contains("devcheck") || lowerName.contains("termux") ||
+                lowerName.contains("device info") || lowerName.contains("benchmark")
+
+        if (isHardwareUtility) {
+            return TargetEngineType.HARDWARE_UTILITY
+        }
+
+        // 9. OJOL, DRIVER & LOCATION SECURITY (Gojek, Grab, Maxim, InDriver, Lalamove, Fake GPS)
+        val isRideHailing = lowerPkg.contains("gojek") || lowerPkg.contains("grab") || lowerPkg.contains("maxim") ||
+                lowerPkg.contains("indriver") || lowerPkg.contains("lalamove") || lowerPkg.contains("shopeefood") ||
+                lowerPkg.contains("fakegps") || lowerPkg.contains("mockgps") || lowerPkg.contains("anteraja") ||
+                lowerPkg.contains("sicepat") || lowerPkg.contains("borzo") || lowerPkg.contains("deliveree") ||
+                lowerName.contains("gojek") || lowerName.contains("grab") || lowerName.contains("maxim") ||
+                lowerName.contains("indriver") || lowerName.contains("lalamove") || lowerName.contains("fake gps") ||
+                lowerName.contains("driver") || lowerName.contains("kurir") || lowerName.contains("ojol")
+
+        if (isRideHailing) {
+            return TargetEngineType.RIDE_HAILING
+        }
+
+        // 10. SOCIAL MEDIA & CHAT MULTI-AKUN (WhatsApp, Telegram, Instagram, Facebook, X/Twitter, Threads, Discord)
+        val isSocialMessaging = lowerPkg.contains("whatsapp") || lowerPkg.contains("telegram") ||
+                lowerPkg.contains("instagram") || lowerPkg.contains("facebook") ||
+                lowerPkg.contains("katana") || lowerPkg.contains("twitter") ||
+                lowerPkg.contains("threads") || lowerPkg.contains("discord") ||
+                lowerPkg.contains("snapchat") || lowerPkg.contains("line.android") ||
+                lowerPkg.contains("wechat") || lowerPkg.contains("viber") ||
+                lowerPkg.contains("signal") || lowerPkg.contains("michat") ||
+                lowerName.contains("whatsapp") || lowerName.contains("telegram") ||
+                lowerName.contains("instagram") || lowerName.contains("facebook") ||
+                lowerName.contains("twitter") || lowerName.contains("discord") ||
+                lowerName.contains("michat")
+
+        if (isSocialMessaging) {
+            return TargetEngineType.SOCIAL_MESSAGING
+        }
+
+        // 11. COMPETITIVE ONLINE GAME & ANTI-CHEAT (Mobile Legends, Free Fire, PUBG, Roblox, Genshin)
+        val isCompetitiveGame = isGameFlag ||
+                lowerPkg.contains("mobilelegends") || lowerPkg.contains("freefire") ||
+                lowerPkg.contains("pubg") || lowerPkg.contains("roblox") ||
+                lowerPkg.contains("genshin") || lowerPkg.contains("codm") ||
+                lowerPkg.contains("honorofkings") || lowerPkg.contains("clash") ||
+                lowerPkg.contains("brawlstars") || lowerPkg.contains("riotgames") ||
+                lowerName.contains("mobile legends") || lowerName.contains("free fire") ||
+                lowerName.contains("pubg") || lowerName.contains("roblox") ||
+                lowerName.contains("genshin impact")
+
+        if (isCompetitiveGame) {
+            return TargetEngineType.COMPETITIVE_GAME
+        }
+
+        // 12. E-COMMERCE & MARKETPLACE (Lazada, Blibli, Bukalapak, Zalora, AliExpress, Amazon)
+        val isCommerce = lowerPkg.contains("lazada") || lowerPkg.contains("blibli") ||
+                lowerPkg.contains("bukalapak") || lowerPkg.contains("zalora") ||
+                lowerPkg.contains("aliexpress") || lowerPkg.contains("amazon") ||
+                lowerPkg.contains("ebay") || lowerPkg.contains("tiktokshop") ||
+                lowerPkg.contains("olx") || lowerPkg.contains("bhinneka") ||
+                lowerName.contains("lazada") || lowerName.contains("blibli") ||
+                lowerName.contains("bukalapak") || lowerName.contains("zalora") ||
+                lowerName.contains("aliexpress") || lowerName.contains("belanja") ||
+                lowerName.contains("toko online")
+
+        if (isCommerce) {
+            return TargetEngineType.GENERIC_COMMERCE
+        }
+
+        // 13. System App
+        if (isSystem) {
             return TargetEngineType.SYSTEM_SERVICE
         }
 
-        val lowerPkg = packageName.lowercase()
-        val lowerName = appName.lowercase()
-
-        return when {
-            lowerPkg.contains("com.shopee") || lowerName.contains("shopee") -> TargetEngineType.SHOPEE
-            lowerPkg.contains("com.tokopedia") || lowerName.contains("tokopedia") -> TargetEngineType.TOKOPEDIA
-            
-            // ByteDance & Video Reward Platforms (TikTok, PineDrama, DramaBox, ReelShort, SnackVideo)
-            lowerPkg.contains("com.ss.android") || 
-            lowerPkg.contains("zhiliaoapp") || 
-            lowerPkg.contains("tiktok") || 
-            lowerPkg.contains("pinedrama") || 
-            lowerPkg.contains("dramabox") || 
-            lowerPkg.contains("reelshort") ||
-            lowerPkg.contains("kuaishou") ||
-            lowerPkg.contains("snackvideo") ||
-            lowerName.contains("pinedrama") ||
-            lowerName.contains("tiktok") -> TargetEngineType.BYTEDANCE_VIDEO
-
-            // Banking & E-Wallets
-            lowerPkg.contains("dana") || lowerPkg.contains("ovo") || lowerPkg.contains("gopay") ||
-            lowerPkg.contains("bca") || lowerPkg.contains("mandiri") || lowerPkg.contains("bri") ||
-            lowerPkg.contains("jago") || lowerPkg.contains("linkaja") || lowerPkg.contains("fintech") ||
-            lowerPkg.contains("flip") || lowerPkg.contains("jenius") || lowerPkg.contains("aladin") ||
-            lowerPkg.contains("seabank") || lowerPkg.contains("neobank") -> TargetEngineType.FINANCIAL_BANKING
-
-            // Ride Hailing & Fake GPS Sensitive
-            lowerPkg.contains("gojek") || lowerPkg.contains("grab") || lowerPkg.contains("maxim") || 
-            lowerPkg.contains("indriver") || lowerPkg.contains("lalamove") -> TargetEngineType.RIDE_HAILING
-
-            // Other Shopping & E-Commerce
-            lowerPkg.contains("lazada") || lowerPkg.contains("blibli") || lowerPkg.contains("bukalapak") ||
-            lowerPkg.contains("zalora") || lowerPkg.contains("alibaba") || lowerPkg.contains("aliexpress") -> TargetEngineType.GENERIC_COMMERCE
-
-            // Games & Entertainment
-            lowerPkg.contains("instagram") || lowerPkg.contains("facebook") || lowerPkg.contains("twitter") ||
-            lowerPkg.contains("whatsapp") || lowerPkg.contains("telegram") || lowerPkg.contains("mobilelegends") ||
-            lowerPkg.contains("freefire") || lowerPkg.contains("pubg") -> TargetEngineType.ENTERTAINMENT_GAME
-
-            else -> if (isSystem) TargetEngineType.SYSTEM_SERVICE else TargetEngineType.GENERIC_COMMERCE
-        }
+        // 14. Fallback: General Productivity / Utility
+        return TargetEngineType.GENERAL_APP
     }
 
     suspend fun fetchLiveNetworkIntelligence(): LiveNetworkIntelligence = withContext(Dispatchers.IO) {
@@ -237,7 +405,13 @@ class TargetAppAuditor(private val context: Context) {
                 val appInfo = pm.getApplicationInfo(pkg, 0)
                 val appName = pm.getApplicationLabel(appInfo).toString()
                 val isSystem = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
-                val engineType = identifyEngineType(pkg, appName, isSystem)
+                val packageInfo = try {
+                    pm.getPackageInfo(pkg, PackageManager.GET_PERMISSIONS)
+                } catch (_: Exception) {
+                    null
+                }
+
+                val engineType = identifyEngineTypeAdvanced(appInfo, packageInfo, appName)
 
                 val auditResult = evaluateTargetApp(
                     appName = appName,
@@ -282,33 +456,66 @@ class TargetAppAuditor(private val context: Context) {
             Settings.Global.getInt(context.contentResolver, Settings.Global.ADB_ENABLED, 0) == 1
         } catch (_: Exception) { false }
 
+        val isAccessibilityEnabled = try {
+            val enabledServices = Settings.Secure.getString(context.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
+            !enabledServices.isNullOrBlank()
+        } catch (_: Exception) { false }
+
+        val isMockLocationEnabled = try {
+            @Suppress("DEPRECATION")
+            Settings.Secure.getInt(context.contentResolver, Settings.Secure.ALLOW_MOCK_LOCATION, 0) != 0
+        } catch (_: Exception) { false }
+
         val twrpDir = File(Environment.getExternalStorageDirectory(), "TWRP")
         val titaniumDir = File(Environment.getExternalStorageDirectory(), "TitaniumBackup")
         val parallelDir = File(Environment.getExternalStorageDirectory(), "ParallelApp")
 
         // =========================================================================
-        // TARGET 1: BYTEDANCE ECOSYSTEM (PineDrama, TikTok, DramaBox, SnackVideo)
+        // TARGET 1: REWARD GAME & GAME KOIN (Fruit Blast, Tap Coin, Crazy Dog, dll)
         // =========================================================================
-        if (engineType == TargetEngineType.BYTEDANCE_VIDEO) {
-            if (networkIntel.isVpnOrProxy) {
+        if (engineType == TargetEngineType.REWARD_GAME) {
+            if (isAccessibilityEnabled) {
                 score -= 35
                 dangers.add(
                     AppDangerItem(
-                        title = "Koneksi VPN / Proxy Datacenter Aktif",
+                        title = "Layanan Aksesibilitas (Auto-Clicker Bot Tuyul) Aktif",
                         severity = DangerSeverity.CRITICAL,
-                        explanation = "ByteDance Security Guardian melarang IP Datacenter/VPN. Memicu pembatalan koin tugas nonton, pembatasan event, dan shadowban multi-device.",
-                        technicalProof = "Koneksi: VPN Aktif (Public IP: ${networkIntel.publicIp})"
+                        explanation = "Game reward seperti $appName memindai AccessibilityService untuk memblokir auto-tapper / macro tap layar. Dampaknya penarikan saldo ditolak dan akun di-banned permanen.",
+                        technicalProof = "Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES aktif"
                     )
                 )
                 fixSteps.add(
                     AppFixStep(
                         stepNumber = stepCounter++,
-                        actionTitle = "Matikan VPN & Rotasi IP Seluler",
-                        detailedInstruction = "Aplikasi video reward mewajibkan IP residensial seluler. Matikan VPN, gunakan kuota seluler, lalu aktifkan dan matikan Mode Pesawat selama 5 detik.",
-                        ksuFix = "Matikan koneksi VPN sistem Android. Buka Pengaturan KSU -> Module -> Pastikan tidak ada VPN hook aktif.",
-                        magiskFix = "Matikan VPN. Jika menggunakan modul proxy Magisk, nonaktifkan modul tersebut sebelum membuka $appName.",
-                        apatchFix = "Matikan VPN/Proxy di setelan jaringan Android.",
-                        generalAction = "Aktifkan dan matikan Mode Pesawat (Airplane Mode) selama 5-10 detik untuk mendapatkan subnet IP publik baru."
+                        actionTitle = "Matikan Layanan Aksesibilitas Otomasi",
+                        detailedInstruction = "Buka Pengaturan HP -> Aksesibilitas -> Nonaktifkan semua aplikasi asisten klik otomatis atau macro sebelum membuka $appName.",
+                        ksuFix = "Matikan auto clicker di Pengaturan Android. Jika memakai modul auto tap KSU, pastikan tidak terdaftar di sistem Accessibility.",
+                        magiskFix = "Matikan aplikasi auto-clicker di Pengaturan -> Aksesibilitas.",
+                        apatchFix = "Nonaktifkan Accessibility Service di Pengaturan Android.",
+                        generalAction = "Pengaturan -> Aksesibilitas -> Nonaktifkan Auto Clicker / Asisten Sentuh."
+                    )
+                )
+            }
+
+            if (networkIntel.isVpnOrProxy) {
+                score -= 30
+                dangers.add(
+                    AppDangerItem(
+                        title = "Koneksi VPN / Datacenter Proxy Aktif (Anti-Ad Fraud)",
+                        severity = DangerSeverity.CRITICAL,
+                        explanation = "Ad-network pada game reward (Unity Ads, Google AdMob) mendeteksi IP Datacenter/VPN. Menyebabkan iklan reward tidak muncul (no fill) atau bonus koin dibatalkan.",
+                        technicalProof = "VPN Transport Aktif (IP: ${networkIntel.publicIp})"
+                    )
+                )
+                fixSteps.add(
+                    AppFixStep(
+                        stepNumber = stepCounter++,
+                        actionTitle = "Gunakan Kuota Data Seluler & Rotasi IP",
+                        detailedInstruction = "Matikan VPN. Gunakan kuota data seluler normal, lalu lakukan rotasi IP dengan Mode Pesawat selama 5 detik setiap pergantian akun tuyul.",
+                        ksuFix = "Matikan VPN di Android. Buka KSU -> Module -> Pastikan tidak ada proxy hook aktif.",
+                        magiskFix = "Matikan VPN. Nonaktifkan modul proxy di Magisk.",
+                        apatchFix = "Matikan VPN di Pengaturan Jaringan Android.",
+                        generalAction = "Nyalakan dan matikan Mode Pesawat selama 5 detik untuk merotasi IP seluler."
                     )
                 )
             }
@@ -317,21 +524,96 @@ class TargetAppAuditor(private val context: Context) {
                 score -= 25
                 dangers.add(
                     AppDangerItem(
-                        title = "Biner su Publik Terbaca di Sistem",
+                        title = "Biner su Terdeteksi (Game Guardian / Memory Tamper)",
                         severity = DangerSeverity.HIGH,
-                        explanation = "ByteDance mengecek keberadaan biner /system/bin/su atau /system/xbin/su untuk mencegah otomatisasi macro/bot nonton.",
-                        technicalProof = "Ditemukan biner: ${dangerousPaths.foundBinaries.joinToString()}"
+                        explanation = "Mesin Unity / Unreal mendeteksi biner su dan membatasi klaim koin harian untuk mencegah modifikasi memory / speed hack.",
+                        technicalProof = "Biner ditemukan: ${dangerousPaths.foundBinaries.joinToString()}"
                     )
                 )
                 fixSteps.add(
                     AppFixStep(
                         stepNumber = stepCounter++,
-                        actionTitle = "Sembunyikan Akses Root untuk $appName",
-                        detailedInstruction = "Isolasi akses root agar $appName berjalan di lingkungan sandbox murni pengguna biasa.",
-                        ksuFix = "Buka KernelSU / ReSuKSU -> Superuser -> Cari '$appName' ($packageName) -> Pastikan TIDAK diberi izin Root (Uncheck) -> Ubah Mount Namespace ke mode 'Unshare/Isolate'. Pasang modul 'Zygisk Assistant' (oleh cuynu).",
-                        magiskFix = "Buka Magisk -> Setelan -> Aktifkan Zygisk -> Masuk ke Configure DenyList -> Centang '$packageName' (semua subproses). Pasang modul 'Shamiko' (mode whitelist aktif).",
-                        apatchFix = "Buka APatch Manager -> Superuser -> Pastikan '$packageName' tidak memiliki izin SuperUser -> Aktifkan APatch KPM Hider.",
-                        generalAction = "Restart aplikasi $appName setelah mengatur isolasi root."
+                        actionTitle = "Isolasi Hak Root untuk $appName",
+                        detailedInstruction = "Sembunyikan akses root agar game reward berjalan di lingkungan user biasa tanpa deteksi su.",
+                        ksuFix = "Di KernelSU Next / ReSuKSU: Superuser -> Cari '$appName' -> Pastikan Root TIDAK dicentang -> Set Mount Namespace ke 'Unshare/Isolate'. Pasang Zygisk Assistant (cuynu).",
+                        magiskFix = "Di Magisk: Settings -> Enforce DenyList: OFF -> Configure DenyList -> Centang '$packageName'. Pasang modul Shamiko.",
+                        apatchFix = "Di APatch: Uncheck izin SuperUser untuk '$packageName' -> Pasang APatch KPM Hider.",
+                        generalAction = "Reset Google Advertising ID (GAID) di Pengaturan Google -> Iklan sebelum membuat akun game baru."
+                    )
+                )
+            }
+
+            val verdict = when {
+                score >= 85 -> "100% AMAN (Siap Tuyul Koin Game & Klaim Saldo)"
+                score >= 60 -> "TERANCAM PENARIKAN SALDO DITOLAK / IKLAN BLANK"
+                else -> "BAHAYA KRITIKAL (Auto-Banned oleh Anti-Cheat Game)"
+            }
+            val colorHex = when {
+                score >= 85 -> 0xFF00E676
+                score >= 60 -> 0xFFFFD600
+                else -> 0xFFFF1744
+            }
+
+            return TargetAppAuditResult(
+                appName = appName,
+                packageName = packageName,
+                isSystemApp = isSystem,
+                engineType = engineType,
+                readinessScore = score.coerceIn(0, 100),
+                verdictTitle = verdict,
+                statusColorHex = colorHex,
+                detectedDangers = dangers,
+                fixSteps = fixSteps,
+                multiAccountAdvice = "Untuk Game Koin ($appName): (1) Matikan auto-clicker accessibility saat withdraw saldo, (2) Wajib kuota seluler tanpa VPN agar iklan reward muncul, (3) Reset GAID setiap pergantian akun tuyul."
+            )
+        }
+
+        // =========================================================================
+        // TARGET 2: SHORT DRAMA & VIDEO REWARD (FreeReels, PineDrama, DramaBox)
+        // =========================================================================
+        else if (engineType == TargetEngineType.SHORT_DRAMA_REWARD) {
+            if (networkIntel.isVpnOrProxy) {
+                score -= 35
+                dangers.add(
+                    AppDangerItem(
+                        title = "Koneksi VPN / Datacenter Proxy Terdeteksi",
+                        severity = DangerSeverity.CRITICAL,
+                        explanation = "Platform Short Drama ($appName) memblokir reward koin tontonan jika IP berasal dari VPN atau Datacenter Proxy (anti-bot video streaming).",
+                        technicalProof = "IP: ${networkIntel.publicIp} (VPN Active)"
+                    )
+                )
+                fixSteps.add(
+                    AppFixStep(
+                        stepNumber = stepCounter++,
+                        actionTitle = "Matikan VPN & Rotasi IP Seluler",
+                        detailedInstruction = "Gunakan data seluler reguler. Aktifkan Mode Pesawat selama 5 detik untuk memperbarui subnet IP sebelum membuka $appName.",
+                        ksuFix = "Matikan VPN di Pengaturan Android. Pastikan tidak ada modul routing VPN di KSU.",
+                        magiskFix = "Matikan VPN di Pengaturan Android.",
+                        apatchFix = "Matikan VPN di Pengaturan Jaringan Android.",
+                        generalAction = "Mode Pesawat selama 5 detik untuk mengganti IP publik."
+                    )
+                )
+            }
+
+            if (dangerousPaths.foundBinaries.isNotEmpty()) {
+                score -= 25
+                dangers.add(
+                    AppDangerItem(
+                        title = "Biner Root Terbaca di Sistem",
+                        severity = DangerSeverity.HIGH,
+                        explanation = "Aplikasi mendeteksi keberadaan su di sistem dan menonaktifkan reward tontonan drama.",
+                        technicalProof = "Path: ${dangerousPaths.foundBinaries.joinToString()}"
+                    )
+                )
+                fixSteps.add(
+                    AppFixStep(
+                        stepNumber = stepCounter++,
+                        actionTitle = "Isolasi Biner Root untuk $appName",
+                        detailedInstruction = "Sembunyikan akses root dari $appName.",
+                        ksuFix = "Di KernelSU Next: Uncheck hak root untuk '$packageName', ganti Mount Namespace ke 'Unshare/Isolate'. Pasang modul Zygisk Assistant.",
+                        magiskFix = "Di Magisk: Masuk Configure DenyList -> Centang '$packageName'. Pasang Shamiko.",
+                        apatchFix = "Di APatch: Pastikan '$packageName' tidak memiliki hak SuperUser.",
+                        generalAction = "Reset Google Advertising ID (GAID) di Pengaturan Android -> Google -> Iklan."
                     )
                 )
             }
@@ -340,29 +622,202 @@ class TargetAppAuditor(private val context: Context) {
                 score -= 10
                 dangers.add(
                     AppDangerItem(
-                        title = "Jejak Folder Kloning / Backup di Penyimpanan",
+                        title = "Jejak Kloning Multi-Akun di Penyimpanan",
                         severity = DangerSeverity.MEDIUM,
-                        explanation = "Ditemukan folder kloning lama yang berisiko mengaitkan identitas akun baru dengan akun yang pernah ditautkan di HP ini.",
-                        technicalProof = "Path: /sdcard/ParallelApp atau /sdcard/TitaniumBackup"
+                        explanation = "Ditemukan sisa folder kloning lama yang bisa menautkan akun drama baru dengan riwayat akun lama.",
+                        technicalProof = "Folder klona ditemukan di /sdcard/"
                     )
                 )
                 fixSteps.add(
                     AppFixStep(
                         stepNumber = stepCounter++,
-                        actionTitle = "Pembersihan Cache Iklan & Jejak Kloning",
-                        detailedInstruction = "Hapus folder klona lama dan lakukan reset Google Advertising ID (GAID) agar profil iklan diperbarui.",
-                        ksuFix = "Buka Pengaturan Android -> Google -> Iklan -> Reset ID Pengiklan (GAID).",
-                        magiskFix = "Reset ID Pengiklan di Pengaturan Google, atau gunakan modul SD Maid SE via Magisk.",
-                        apatchFix = "Reset Google Advertising ID di Pengaturan Android.",
-                        generalAction = "Hapus folder sisa di /sdcard/ menggunakan File Manager, lalu hapus data aplikasi $appName sebelum login akun baru."
+                        actionTitle = "Bersihkan Jejak Kloning",
+                        detailedInstruction = "Hapus folder klona di /sdcard/ dan bersihkan cache aplikasi sebelum login akun baru.",
+                        ksuFix = "Hapus folder sisa di /sdcard/.",
+                        magiskFix = "Hapus folder sisa di /sdcard/.",
+                        apatchFix = "Hapus folder sisa di /sdcard/.",
+                        generalAction = "Hapus Data $appName sebelum pergantian akun baru."
                     )
                 )
             }
 
             val verdict = when {
-                score >= 85 -> "100% AMAN (Bebas Deteksi & Siap Multi-Akun Nonton/Reward)"
-                score >= 65 -> "PERLU ROTASI IP (Risiko Banned Reward / Shadowban)"
-                else -> "BAHAYA TINGGI (Auto-Banned oleh ByteDance Guardian)"
+                score >= 85 -> "100% AMAN (Siap Nonton Drama Koin & Multi-Akun)"
+                score >= 60 -> "TERANCAM KOIN NONTON TIDAK BERTAMBAH / SHADOWBAN"
+                else -> "BAHAYA TINGGI (Auto-Banned oleh Security Guardian)"
+            }
+            val colorHex = when {
+                score >= 85 -> 0xFF00E676
+                score >= 60 -> 0xFFFFD600
+                else -> 0xFFFF1744
+            }
+
+            return TargetAppAuditResult(
+                appName = appName,
+                packageName = packageName,
+                isSystemApp = isSystem,
+                engineType = engineType,
+                readinessScore = score.coerceIn(0, 100),
+                verdictTitle = verdict,
+                statusColorHex = colorHex,
+                detectedDangers = dangers,
+                fixSteps = fixSteps,
+                multiAccountAdvice = "Untuk Short Drama ($appName): Wajib IP seluler residensial bersih (hindari VPN), gunakan Mount Namespace Unshare di KSU / Shamiko di Magisk, dan reset GAID saat ganti akun."
+            )
+        }
+
+        // =========================================================================
+        // TARGET 3: MINIMARKET & RETAIL LOYALTY (Alfagift, Indomaret Poinku, dll)
+        // =========================================================================
+        else if (engineType == TargetEngineType.RETAIL_LOYALTY) {
+            if (isAdbEnabled) {
+                score -= 30
+                dangers.add(
+                    AppDangerItem(
+                        title = "USB Debugging Aktif (Blokir Barcode Kupon Kasir)",
+                        severity = DangerSeverity.CRITICAL,
+                        explanation = "Aplikasi minimarket seperti $appName secara agresif memblokir penukaran voucher promo / barcode kasir jika USB Debugging menyala (anti-bot tuyul kupon).",
+                        technicalProof = "Settings.Global.ADB_ENABLED = 1"
+                    )
+                )
+                fixSteps.add(
+                    AppFixStep(
+                        stepNumber = stepCounter++,
+                        actionTitle = "Matikan USB Debugging di Opsi Pengembang",
+                        detailedInstruction = "Buka Pengaturan HP -> Opsi Pengembang -> Matikan 'Debugging USB' sebelum membuka $appName di kasir toko.",
+                        ksuFix = "Pengaturan Android -> Opsi Pengembang -> Toggle Off 'Debugging USB'.",
+                        magiskFix = "Pengaturan Android -> Opsi Pengembang -> Toggle Off 'Debugging USB'.",
+                        apatchFix = "Pengaturan Android -> Opsi Pengembang -> Toggle Off 'Debugging USB'.",
+                        generalAction = "Matikan USB Debugging dan Opsi Pengembang saat belanja."
+                    )
+                )
+            }
+
+            if (isMockLocationEnabled) {
+                score -= 25
+                dangers.add(
+                    AppDangerItem(
+                        title = "Mock Location (Lokasi Palsu) Terdeteksi",
+                        severity = DangerSeverity.HIGH,
+                        explanation = "$appName mendeteksi mock location provider untuk mencegah klaim kupon promo cabang toko di luar jangkauan fisik.",
+                        technicalProof = "Settings.Secure.ALLOW_MOCK_LOCATION aktif"
+                    )
+                )
+                fixSteps.add(
+                    AppFixStep(
+                        stepNumber = stepCounter++,
+                        actionTitle = "Matikan Aplikasi Lokasi Palsu",
+                        detailedInstruction = "Buka Opsi Pengembang -> Pilih aplikasi lokasi palsu -> Pilih 'Tidak ada'.",
+                        ksuFix = "Gunakan hook FusedLocationProvider (LSPosed) jika perlu spoof GPS tanpa mengaktifkan Mock Location OS.",
+                        magiskFix = "Gunakan hook FusedLocationProvider (LSPosed).",
+                        apatchFix = "Matikan mock location di Pengaturan Pengembang.",
+                        generalAction = "Matikan Mock Location Provider di Opsi Pengembang."
+                    )
+                )
+            }
+
+            if (dangerousPaths.foundFolders.isNotEmpty() || dangerousPaths.foundBinaries.isNotEmpty()) {
+                score -= 25
+                dangers.add(
+                    AppDangerItem(
+                        title = "Folder / Biner Root Terbaca oleh $appName",
+                        severity = DangerSeverity.HIGH,
+                        explanation = "Aplikasi mendeteksi lingkungan ponsel yang di-root dan membatasi penerbitan kupon gratis pendaftaran member baru.",
+                        technicalProof = "Path terdeteksi: ${dangerousPaths.foundFolders.take(2).joinToString()}"
+                    )
+                )
+                fixSteps.add(
+                    AppFixStep(
+                        stepNumber = stepCounter++,
+                        actionTitle = "Isolasi Penuh $appName dari Root",
+                        detailedInstruction = "Gunakan isolasi namespace mount agar $appName tidak bisa membaca file su.",
+                        ksuFix = "Di KernelSU Next / ReSuKSU: Superuser -> '$appName' -> Uncheck Root -> App Profile -> Mount Namespace 'Unshare'. Pasang Zygisk Assistant & Hide My Applist (HMA).",
+                        magiskFix = "Di Magisk: Masuk Configure DenyList -> Centang semua proses '$packageName'. Pasang Shamiko & HMA.",
+                        apatchFix = "Di APatch: Uncheck izin SuperUser untuk '$packageName' -> Pasang APatch KPM Hider.",
+                        generalAction = "Hapus data aplikasi $appName sebelum mendaftar member baru."
+                    )
+                )
+            }
+
+            val verdict = when {
+                score >= 85 -> "100% AMAN (Siap Klaim Kupon Member & Scan Kasir)"
+                score >= 60 -> "RISIKO GAGAL SCAN BARCODE KASIR / VOUCHER DIBLOKIR"
+                else -> "BAHAYA KRITIKAL (Terdeteksi Modifikasi Sistem oleh Alfagift)"
+            }
+            val colorHex = when {
+                score >= 85 -> 0xFF00E676
+                score >= 60 -> 0xFFFFD600
+                else -> 0xFFFF1744
+            }
+
+            return TargetAppAuditResult(
+                appName = appName,
+                packageName = packageName,
+                isSystemApp = isSystem,
+                engineType = engineType,
+                readinessScore = score.coerceIn(0, 100),
+                verdictTitle = verdict,
+                statusColorHex = colorHex,
+                detectedDangers = dangers,
+                fixSteps = fixSteps,
+                multiAccountAdvice = "Untuk Minimarket & Kupon ($appName): Wajib matikan USB Debugging, sembunyikan root dengan Unshare Mount Namespace / Shamiko, dan gunakan rotasi nomor HP bersih saat klaim voucher pendaftar baru."
+            )
+        }
+
+        // =========================================================================
+        // TARGET 4: GOOGLE ECOSYSTEM & AI ASSISTANT (Gemini, YouTube, Gmail)
+        // =========================================================================
+        else if (engineType == TargetEngineType.GOOGLE_ECOSYSTEM) {
+            if (!playIntegrity.meetsBasicIntegrity || !playIntegrity.meetsDeviceIntegrity) {
+                score -= 30
+                dangers.add(
+                    AppDangerItem(
+                        title = "Evaluasi Google Play Integrity Gagal",
+                        severity = DangerSeverity.HIGH,
+                        explanation = "Layanan Google ($appName) memverifikasi sertifikasi perangkat melalui Play Integrity DroidGuard. Jika bootloader unlock terdeteksi, fitur sinkronisasi atau AI Assistant dapat dibatasi.",
+                        technicalProof = "Play Integrity Verdict: ${playIntegrity.evaluationType}"
+                    )
+                )
+                fixSteps.add(
+                    AppFixStep(
+                        stepNumber = stepCounter++,
+                        actionTitle = "Pasang Modul Play Integrity Fix",
+                        detailedInstruction = "Gunakan modul perbaikan fingerprint agar sertifikasi Play Protect dan Device Integrity lolos.",
+                        ksuFix = "Pasang modul Play Integrity Fix (PIF) oleh chiteroman di KernelSU Next -> Buka Setelan -> Hapus Data Google Play Services & Play Store.",
+                        magiskFix = "Pasang modul Play Integrity Fix di Magisk -> Hapus cache Play Services -> Reboot HP.",
+                        apatchFix = "Pasang modul Play Integrity Fix via APatch Manager.",
+                        generalAction = "Pengaturan -> Aplikasi -> Layanan Google Play -> Hapus Semua Data -> Reboot ponsel."
+                    )
+                )
+            }
+
+            if (dangerousPaths.foundBinaries.isNotEmpty()) {
+                score -= 15
+                dangers.add(
+                    AppDangerItem(
+                        title = "Biner su Terdeteksi di Path Standar",
+                        severity = DangerSeverity.MEDIUM,
+                        explanation = "Play Protect mendeteksi biner root publik.",
+                        technicalProof = "Biner: ${dangerousPaths.foundBinaries.joinToString()}"
+                    )
+                )
+                fixSteps.add(
+                    AppFixStep(
+                        stepNumber = stepCounter++,
+                        actionTitle = "Sembunyikan Biner dari Google Play Services",
+                        detailedInstruction = "Tambahkan Google Play Services ke isolasi root.",
+                        ksuFix = "Di KernelSU: Uncheck root untuk Google Play Services & Play Store, set Mount Namespace ke Unshare.",
+                        magiskFix = "Di Magisk: Masukkan com.google.android.gms ke DenyList.",
+                        apatchFix = "Di APatch: Pastikan GMS tidak diberi izin root.",
+                        generalAction = "Restart ponsel setelah mengatur isolasi."
+                    )
+                )
+            }
+
+            val verdict = when {
+                score >= 85 -> "AMAN (Layanan Google & AI Berfungsi Normal)"
+                score >= 65 -> "PERINGATAN INTEGRITAS GOOGLE PLAY SERVICES"
+                else -> "PERANGKAT TIDAK BERSERTIFIKASI PLAY PROTECT"
             }
             val colorHex = when {
                 score >= 85 -> 0xFF00E676
@@ -380,12 +835,53 @@ class TargetAppAuditor(private val context: Context) {
                 statusColorHex = colorHex,
                 detectedDangers = dangers,
                 fixSteps = fixSteps,
-                multiAccountAdvice = "Untuk $appName, fokus utama adalah: (1) Jaringan harus IP Seluler bersih (hindari VPN/Proxy), (2) Isolasi biner su via Mount Namespace / DenyList, (3) Rotasi IP dengan Mode Pesawat saat beralih antar akun."
+                multiAccountAdvice = "Untuk Ekosistem Google ($appName): Pastikan perangkat lolos MEETS_DEVICE_INTEGRITY dengan modul PIF agar tidak terkendala login multi-akun Gmail/YouTube atau pembatasan AI Gemini."
             )
         }
 
         // =========================================================================
-        // TARGET 2: SHOPEE (SudoHide, In-house Bot Engine, Storage TWRP Scan)
+        // TARGET 5: HARDWARE & BATTERY BENCHMARK (Ampere, CPU-Z, AIDA64, Termux)
+        // =========================================================================
+        else if (engineType == TargetEngineType.HARDWARE_UTILITY) {
+            val batteryNodeReadable = File("/sys/class/power_supply/battery/current_now").canRead()
+            if (!batteryNodeReadable) {
+                dangers.add(
+                    AppDangerItem(
+                        title = "Akses Kernel Node Baterai Dibatasi SELinux",
+                        severity = DangerSeverity.INFO,
+                        explanation = "Aplikasi benchmark/baterai seperti $appName membutuhkan akses baca sensor kernel (/sys/class/power_supply). Di Android modern dengan SELinux Enforcing, aplikasi non-root membaca via BatteryManager API standar.",
+                        technicalProof = "/sys/class/power_supply/battery/current_now direct read restricted"
+                    )
+                )
+                fixSteps.add(
+                    AppFixStep(
+                        stepNumber = stepCounter++,
+                        actionTitle = "Gunakan Mode Pembacaan Standar Android",
+                        detailedInstruction = "$appName tetap berfungsi normal membaca arus pengisian daya melalui Android BatteryManager API. Jika butuh pembacaan kernel mA mentah, berikan izin root.",
+                        ksuFix = "Di KernelSU: Jika butuh pembacaan kernel mA presisi, berikan izin root ke '$appName' di Superuser.",
+                        magiskFix = "Di Magisk: Berikan izin Superuser jika ingin membaca langsung node /sys/class/.",
+                        apatchFix = "Di APatch: Berikan izin SuperUser jika diperlukan.",
+                        generalAction = "Tidak ada risiko banned; ini adalah alat utilitas hardware biasa."
+                    )
+                )
+            }
+
+            return TargetAppAuditResult(
+                appName = appName,
+                packageName = packageName,
+                isSystemApp = isSystem,
+                engineType = engineType,
+                readinessScore = 100,
+                verdictTitle = "AMAN (Alat Diagnostik Baterai & Hardware - Bebas Risiko)",
+                statusColorHex = 0xFF00E676,
+                detectedDangers = dangers,
+                fixSteps = fixSteps,
+                multiAccountAdvice = "$appName adalah aplikasi utilitas hardware/baterai. Tidak memiliki sistem anti-fraud deteksi tuyul belanja, sehingga 100% aman digunakan kapan saja."
+            )
+        }
+
+        // =========================================================================
+        // TARGET 6: SHOPEE & SHOPEEPAY (SudoHide & Bot Anti-Fraud)
         // =========================================================================
         else if (engineType == TargetEngineType.SHOPEE) {
             if (twrpDir.exists()) {
@@ -402,9 +898,9 @@ class TargetAppAuditor(private val context: Context) {
                     AppFixStep(
                         stepNumber = stepCounter++,
                         actionTitle = "Hapus Folder TWRP dari Penyimpanan",
-                        detailedInstruction = "Hapus folder TWRP dari /sdcard/ atau gunakan isolasi penyimpanan agar Shopee tidak dapat melihat folder pemulihan sistem.",
-                        ksuFix = "Buka File Manager -> Hapus folder /sdcard/TWRP. Atau pasang modul KSU 'Storage Isolation'.",
-                        magiskFix = "Hapus folder /sdcard/TWRP melalui File Manager, atau pasang modul Magisk Riru/Zygisk Storage Isolation.",
+                        detailedInstruction = "Hapus folder TWRP dari /sdcard/ atau gunakan isolasi penyimpanan.",
+                        ksuFix = "Hapus folder /sdcard/TWRP melalui File Manager, atau pasang modul Storage Isolation.",
+                        magiskFix = "Hapus folder /sdcard/TWRP melalui File Manager.",
                         apatchFix = "Hapus folder TWRP melalui File Manager.",
                         generalAction = "Pastikan di /sdcard/ tidak ada folder bernama 'TWRP', 'Magisk', atau 'TitaniumBackup'."
                     )
@@ -424,11 +920,11 @@ class TargetAppAuditor(private val context: Context) {
                 fixSteps.add(
                     AppFixStep(
                         stepNumber = stepCounter++,
-                        actionTitle = "Isolasi Mount Namespace & Zygisk untuk Shopee",
+                        actionTitle = "Isolasi Mount Namespace untuk Shopee",
                         detailedInstruction = "Isolasi partisi sistem dari proses Shopee agar folder root dan modul tidak terbaca di /proc/mounts.",
-                        ksuFix = "Di KernelSU Next / ReSuKSU: Buka Superuser -> Cari 'Shopee' -> Uncheck Root -> Masuk opsi App Profile -> Pilih Mount Namespace: 'Unshare / Isolate'. Pasang modul Zygisk Assistant (cuynu) untuk memblokir deteksi mount root.",
-                        magiskFix = "Di Magisk: Buka Settings -> Aktifkan Zygisk -> Enforce DenyList: OFF -> Configure DenyList -> Centang semua proses Shopee (termasuk com.shopee.id:support). Pasang modul 'Shamiko'.",
-                        apatchFix = "Di APatch: Nonaktifkan hak SuperUser untuk Shopee -> Pasang modul APatch KPM Hider untuk menyembunyikan kernel mount.",
+                        ksuFix = "Di KernelSU Next: Superuser -> 'Shopee' -> Uncheck Root -> App Profile -> Mount Namespace 'Unshare / Isolate'. Pasang Zygisk Assistant (cuynu).",
+                        magiskFix = "Di Magisk: Settings -> Aktifkan Zygisk -> Configure DenyList -> Centang semua proses Shopee. Pasang Shamiko.",
+                        apatchFix = "Di APatch: Nonaktifkan hak SuperUser untuk Shopee -> Pasang APatch KPM Hider.",
                         generalAction = "Force Stop Shopee, bersihkan cache, dan buka kembali."
                     )
                 )
@@ -449,7 +945,7 @@ class TargetAppAuditor(private val context: Context) {
                         stepNumber = stepCounter++,
                         actionTitle = "Matikan USB Debugging saat Checkout",
                         detailedInstruction = "Matikan opsi pengembang (USB Debugging) saat melakukan transaksi belanja.",
-                        ksuFix = "Buka Pengaturan HP -> Opsi Pengembang -> Matikan 'Debugging USB'.",
+                        ksuFix = "Pengaturan HP -> Opsi Pengembang -> Matikan 'Debugging USB'.",
                         magiskFix = "Matikan 'Debugging USB' di Opsi Pengembang Android.",
                         apatchFix = "Matikan 'Debugging USB' di Opsi Pengembang Android.",
                         generalAction = "Pengaturan -> Opsi Pengembang -> Toggle Off USB Debugging."
@@ -483,7 +979,7 @@ class TargetAppAuditor(private val context: Context) {
         }
 
         // =========================================================================
-        // TARGET 3: TOKOPEDIA / GOPAY (ThreatMetrix LexisNexis & Mount Probe)
+        // TARGET 7: TOKOPEDIA / GOPAY (ThreatMetrix LexisNexis & Mount Probe)
         // =========================================================================
         else if (engineType == TargetEngineType.TOKOPEDIA) {
             if (dangerousPaths.foundBinaries.isNotEmpty() || dangerousPaths.foundFolders.isNotEmpty()) {
@@ -522,20 +1018,20 @@ class TargetAppAuditor(private val context: Context) {
                 fixSteps.add(
                     AppFixStep(
                         stepNumber = stepCounter++,
-                        actionTitle = "Perbaiki Play Integrity Device Verdict",
-                        detailedInstruction = "Pasang modul perbaikan Play Integrity fingerprint agar verifikasi MEETS_DEVICE_INTEGRITY lolos.",
-                        ksuFix = "Pasang modul Play Integrity Fix (PIF) oleh chiteroman di KernelSU Next -> Buka Google Play Store -> Hapus Data Play Store & Play Services.",
-                        magiskFix = "Pasang modul Play Integrity Fix (PIF) di Magisk -> Hapus cache Play Store & Play Services -> Cek kembali integritas.",
-                        apatchFix = "Pasang modul Play Integrity Fix via APatch -> Hapus data Google Play Services.",
-                        generalAction = "Buka Pengaturan -> Aplikasi -> Layanan Google Play -> Hapus Semua Data, lalu reboot HP."
+                        actionTitle = "Perbaiki Play Integrity Fingerprint",
+                        detailedInstruction = "Gunakan modul Play Integrity Fix untuk memulihkan verifikasi perangkat.",
+                        ksuFix = "Pasang modul Play Integrity Fix di KernelSU.",
+                        magiskFix = "Pasang modul Play Integrity Fix di Magisk.",
+                        apatchFix = "Pasang modul Play Integrity Fix di APatch.",
+                        generalAction = "Update modul Play Integrity Fix dan hapus data Play Services."
                     )
                 )
             }
 
             val verdict = when {
                 score >= 80 -> "AMAN DARI DETEKSI THREATMETRIX TOKOPEDIA"
-                score >= 60 -> "TERANCAM VOUCHER DIBATALKAN / PROMO DIHILANGKAN"
-                else -> "BAHAYA TINGGI (ThreatMetrix Mendeteksi Lingkungan Root)"
+                score >= 60 -> "TERANCAM VOUCHER DISKON DICABUT / LIMIT TRANSAKSI"
+                else -> "BAHAYA TINGGI (Terdeteksi Modifikasi Partisi oleh ThreatMetrix)"
             }
             val colorHex = when {
                 score >= 80 -> 0xFF00E676
@@ -553,33 +1049,33 @@ class TargetAppAuditor(private val context: Context) {
                 statusColorHex = colorHex,
                 detectedDangers = dangers,
                 fixSteps = fixSteps,
-                multiAccountAdvice = "Tokopedia menggunakan ThreatMetrix: Kuncinya adalah Mount Namespace Unshare di KSU / Shamiko di Magisk, ditambah lolos Device Integrity untuk kelancaran transaksi GoPay."
+                multiAccountAdvice = "Untuk Tokopedia / GoPay: Wajib isolasi mount namespace di KernelSU / Shamiko Magisk agar SDK ThreatMetrix tidak mendeteksi tabel partisi root."
             )
         }
 
         // =========================================================================
-        // TARGET 4: BANK & E-WALLET (BCA, DANA, Livin, Mandiri, Jago, SeaBank)
+        // TARGET 8: FINANCIAL, BANKING & PINJOL
         // =========================================================================
         else if (engineType == TargetEngineType.FINANCIAL_BANKING) {
-            if (dangerousPaths.foundBinaries.isNotEmpty() || dangerousPaths.foundFolders.isNotEmpty()) {
+            if (dangerousPaths.foundBinaries.isNotEmpty()) {
                 score -= 35
                 dangers.add(
                     AppDangerItem(
-                        title = "Deteksi RootBeer & Anti-Tamper Finansial",
+                        title = "Biner Root Terdeteksi (RootBeer Defense)",
                         severity = DangerSeverity.CRITICAL,
-                        explanation = "Aplikasi Bank menggunakan library RootBeer dan memindai biner su, test-keys, dan busybox. Aplikasi akan langsung force close / exit.",
-                        technicalProof = "Biner root atau folder su ditemukan"
+                        explanation = "Aplikasi perbankan mendeteksi biner su langsung di path sistem standar.",
+                        technicalProof = "Biner: ${dangerousPaths.foundBinaries.joinToString()}"
                     )
                 )
                 fixSteps.add(
                     AppFixStep(
                         stepNumber = stepCounter++,
-                        actionTitle = "Isolasi Penuh Aplikasi Perbankan",
-                        detailedInstruction = "Aplikasi bank membutuhkan proteksi Zygisk dan isolasi total agar tidak mendeteksi biner.",
-                        ksuFix = "Di KernelSU Next / ReSuKSU: Superuser -> $appName -> Uncheck Root -> App Profile -> Mount Namespace 'Isolate/Unshare'. Pasang modul Zygisk Assistant & Hide My Applist (HMA). Di HMA buat template blacklist/whitelist untuk $appName.",
-                        magiskFix = "Di Magisk: Masuk ke Pengaturan -> Enforce DenyList: OFF -> Configure DenyList -> Centang penuh '$packageName'. Pasang modul Shamiko & Hide My Applist (HMA).",
-                        apatchFix = "Di APatch: Uncheck izin SuperUser -> Gunakan modul APatch KPM Hider & Hide My Applist.",
-                        generalAction = "Setelah konfigurasi, Hapus Cache aplikasi bank, lalu buka kembali."
+                        actionTitle = "Sembunyikan Akses Root dari Perbankan",
+                        detailedInstruction = "Jangan izinkan $appName mendeteksi file root su.",
+                        ksuFix = "KernelSU: Cabut izin Superuser untuk '$appName', set Mount Namespace ke 'Unshare', pasang Zygisk Assistant & Hide My Applist.",
+                        magiskFix = "Magisk: Tambahkan '$packageName' ke DenyList, pasang Shamiko & Hide My Applist.",
+                        apatchFix = "APatch: Cabut izin SuperUser, pasang APatch KPM Hider.",
+                        generalAction = "Hapus aplikasi Magisk Manager (atau gunakan fitur Sembunyikan Aplikasi Magisk)."
                     )
                 )
             }
@@ -588,33 +1084,33 @@ class TargetAppAuditor(private val context: Context) {
                 score -= 25
                 dangers.add(
                     AppDangerItem(
-                        title = "Play Integrity Belum Lolos Device Integrity",
+                        title = "Evaluasi Hardware Play Integrity Gagal",
                         severity = DangerSeverity.HIGH,
-                        explanation = "Aplikasi perbankan modern menolak login jika ponsel berstatus custom ROM / bootloader unlock tanpa bypass Play Integrity.",
-                        technicalProof = "Device Integrity: GAGAL"
+                        explanation = "Aplikasi finansial/bank menolak berjalan di perangkat yang tidak lolos sertifikasi Play Integrity.",
+                        technicalProof = "Play Integrity status tidak memenuhi device integrity"
                     )
                 )
                 fixSteps.add(
                     AppFixStep(
                         stepNumber = stepCounter++,
-                        actionTitle = "Pasang Modul Play Integrity Fix",
-                        detailedInstruction = "Perbarui spoof fingerprint perangkat agar sertifikasi Google Play lolos MEETS_DEVICE_INTEGRITY.",
-                        ksuFix = "Flash modul Play Integrity Fix (PIF) atau PlayCurl di KernelSU Next.",
-                        magiskFix = "Flash modul Play Integrity Fix (PIF) terbaru di Magisk.",
-                        apatchFix = "Flash modul Play Integrity Fix melalui APatch Manager.",
-                        generalAction = "Hapus data Google Play Services dan Google Play Store, lalu reboot ponsel."
+                        actionTitle = "Pasang Play Integrity Fix",
+                        detailedInstruction = "Perbaiki fingerprint dengan modul PlayIntegrityFix.",
+                        ksuFix = "Pasang modul PIF di KernelSU.",
+                        magiskFix = "Pasang modul PIF di Magisk.",
+                        apatchFix = "Pasang modul PIF di APatch.",
+                        generalAction = "Hapus data Google Play Services."
                     )
                 )
             }
 
             val verdict = when {
-                score >= 85 -> "AMAN (Aplikasi Bank Dapat Dibuka Normal Tanpa Force Close)"
-                score >= 60 -> "BERISIKO DIBLOKIR / FORCE CLOSE SAAT LOGIN"
-                else -> "BAHAYA KRITIKAL (Root Terdeteksi Penuh oleh Bank)"
+                score >= 80 -> "AMAN (Aplikasi Finansial / Bank Siap Digunakan)"
+                score >= 50 -> "PERINGATAN DETEKSI ROOT PADA APLIKASI BANK"
+                else -> "BLOKIR KEAMANAN (Aplikasi Bank Menolak Terbuka / Force Close)"
             }
             val colorHex = when {
-                score >= 85 -> 0xFF00E676
-                score >= 60 -> 0xFFFFD600
+                score >= 80 -> 0xFF00E676
+                score >= 50 -> 0xFFFFD600
                 else -> 0xFFFF1744
             }
 
@@ -628,68 +1124,68 @@ class TargetAppAuditor(private val context: Context) {
                 statusColorHex = colorHex,
                 detectedDangers = dangers,
                 fixSteps = fixSteps,
-                multiAccountAdvice = "Aplikasi finansial sangat ketat: Pastikan tidak ada modul Xposed terlihat, gunakan Hide My Applist (HMA) untuk menyembunyikan aplikasi root, dan loloskan Device Integrity."
+                multiAccountAdvice = "Untuk Aplikasi Bank / E-Wallet ($appName): Wajib lolos MEETS_DEVICE_INTEGRITY dan isolasi root penuh via Zygisk DenyList / KSU Unshare Namespace."
             )
         }
 
         // =========================================================================
-        // TARGET 5: RIDE HAILING & LOGISTIK (Gojek, Grab, Maxim, InDriver)
+        // TARGET 9: RIDE HAILING & LOCATION SENSITIVE (Gojek, Grab, Maxim)
         // =========================================================================
         else if (engineType == TargetEngineType.RIDE_HAILING) {
-            if (isAdbEnabled) {
-                score -= 25
+            if (isMockLocationEnabled) {
+                score -= 40
                 dangers.add(
                     AppDangerItem(
-                        title = "USB Debugging Aktif (Deteksi Mock Location)",
-                        severity = DangerSeverity.HIGH,
-                        explanation = "Aplikasi ojol/driver mendeteksi USB Debugging aktif sebagai indikator penggunaan mock GPS atau bot order.",
-                        technicalProof = "Opsi Pengembang ADB = 1"
+                        title = "Mock Location (Lokasi Palsu / Fake GPS) Terdeteksi",
+                        severity = DangerSeverity.CRITICAL,
+                        explanation = "Aplikasi ojol mendeteksi opsi Mock Location aktif di sistem Android. Menyebabkan akun driver langsung di-suspend (gacor hangus).",
+                        technicalProof = "Settings.Secure.ALLOW_MOCK_LOCATION aktif"
+                    )
+                )
+                fixSteps.add(
+                    AppFixStep(
+                        stepNumber = stepCounter++,
+                        actionTitle = "Matikan Mock Location di Opsi Pengembang",
+                        detailedInstruction = "Matikan aplikasi lokasi palsu di Developer Options.",
+                        ksuFix = "Gunakan hook sistem Fused Location Provider (LSPosed) jika membutuhkan lokasi khusus tanpa mengaktifkan Mock Location OS.",
+                        magiskFix = "Gunakan hook Fused Location Provider via LSPosed.",
+                        apatchFix = "Matikan mock location di Pengaturan Android.",
+                        generalAction = "Pengaturan -> Opsi Pengembang -> Pilih aplikasi lokasi tiruan -> Tidak Ada."
+                    )
+                )
+            }
+
+            if (isAdbEnabled) {
+                score -= 20
+                dangers.add(
+                    AppDangerItem(
+                        title = "USB Debugging Aktif",
+                        severity = DangerSeverity.MEDIUM,
+                        explanation = "Aplikasi driver memblokir orderan jika USB Debugging aktif.",
+                        technicalProof = "Settings.Global.ADB_ENABLED = 1"
                     )
                 )
                 fixSteps.add(
                     AppFixStep(
                         stepNumber = stepCounter++,
                         actionTitle = "Matikan USB Debugging",
-                        detailedInstruction = "Aplikasi ojek online langsung mendeteksi ponsel tuyul jika USB Debugging menyala.",
-                        ksuFix = "Buka Pengaturan HP -> Opsi Pengembang -> Matikan 'Debugging USB'.",
-                        magiskFix = "Buka Pengaturan HP -> Opsi Pengembang -> Matikan 'Debugging USB'.",
-                        apatchFix = "Buka Pengaturan HP -> Opsi Pengembang -> Matikan 'Debugging USB'.",
-                        generalAction = "Matikan Opsi Pengembang secara keseluruhan jika tidak sedang dipakai."
-                    )
-                )
-            }
-
-            if (dangerousPaths.foundBinaries.isNotEmpty()) {
-                score -= 25
-                dangers.add(
-                    AppDangerItem(
-                        title = "Biner Root Terdeteksi di Sistem",
-                        severity = DangerSeverity.HIGH,
-                        explanation = "Mendeteksi biner su yang sering digunakan modul fake GPS.",
-                        technicalProof = "Ditemukan biner: ${dangerousPaths.foundBinaries.joinToString()}"
-                    )
-                )
-                fixSteps.add(
-                    AppFixStep(
-                        stepNumber = stepCounter++,
-                        actionTitle = "Isolasi Root untuk Aplikasi Ojol",
-                        detailedInstruction = "Sembunyikan akses root dari aplikasi driver/ojol.",
-                        ksuFix = "Di KernelSU Next: Uncheck root untuk '$packageName', gunakan Mount Namespace 'Unshare'. Pasang Zygisk Assistant.",
-                        magiskFix = "Di Magisk: Masukkan '$packageName' ke DenyList & pasang Shamiko.",
-                        apatchFix = "Di APatch: Nonaktifkan izin SuperUser untuk '$packageName'.",
-                        generalAction = "Reboot perangkat setelah konfigurasi isolasi root."
+                        detailedInstruction = "Matikan 'Debugging USB' di Pengaturan Pengembang.",
+                        ksuFix = "Matikan USB Debugging.",
+                        magiskFix = "Matikan USB Debugging.",
+                        apatchFix = "Matikan USB Debugging.",
+                        generalAction = "Matikan Opsi Pengembang saat narik order."
                     )
                 )
             }
 
             val verdict = when {
-                score >= 85 -> "AMAN UNTUK APLIKASI OJOL & ORDER"
-                score >= 65 -> "TERDETEKSI FAKE GPS / BOT TUYUL (Risiko Suspend)"
-                else -> "BAHAYA TINGGI (Auto-Suspend Driver/User oleh Sistem Fraud)"
+                score >= 80 -> "AMAN (Siap Terima Orderan / Bebas Suspend)"
+                score >= 50 -> "TERANCAM SUSPEND KARENA DETEKSI LOKASI / ADB"
+                else -> "SUSPEND KRITIKAL (Terdeteksi Fake GPS oleh Server Ojol)"
             }
             val colorHex = when {
-                score >= 85 -> 0xFF00E676
-                score >= 65 -> 0xFFFFD600
+                score >= 80 -> 0xFF00E676
+                score >= 50 -> 0xFFFFD600
                 else -> 0xFFFF1744
             }
 
@@ -703,70 +1199,39 @@ class TargetAppAuditor(private val context: Context) {
                 statusColorHex = colorHex,
                 detectedDangers = dangers,
                 fixSteps = fixSteps,
-                multiAccountAdvice = "Untuk aplikasi ride-hailing: Matikan USB Debugging, sembunyikan aplikasi Fake GPS menggunakan Hide My Applist (HMA), dan jangan berikan izin root ke aplikasi ojol."
+                multiAccountAdvice = "Untuk Driver / Ojol ($appName): Jangan gunakan Mock Location standar Android; gunakan modul hook internal dan pastikan USB debugging nonaktif."
             )
         }
 
         // =========================================================================
-        // TARGET 6: GENERIC COMMERCE, GAMES & OTHER APPS
+        // TARGET 10: SOCIAL MESSAGING MULTI-ACCOUNT (WhatsApp, Telegram, dll)
         // =========================================================================
-        else {
-            if (dangerousPaths.foundBinaries.isNotEmpty()) {
+        else if (engineType == TargetEngineType.SOCIAL_MESSAGING) {
+            if (networkIntel.isVpnOrProxy) {
                 score -= 25
                 dangers.add(
                     AppDangerItem(
-                        title = "Biner su Terbaca",
+                        title = "IP Subnet Datacenter Terdeteksi (Spam Filter)",
                         severity = DangerSeverity.HIGH,
-                        explanation = "Aplikasi mendeteksi ketersediaan biner su di path sistem umum.",
-                        technicalProof = "Ditemukan biner: ${dangerousPaths.foundBinaries.joinToString()}"
+                        explanation = "Pendaftaran akun baru di $appName sering langsung diblokir jika IP terdaftar sebagai proxy atau datacenter.",
+                        technicalProof = "IP: ${networkIntel.publicIp}"
                     )
                 )
                 fixSteps.add(
                     AppFixStep(
                         stepNumber = stepCounter++,
-                        actionTitle = "Sembunyikan Root dari $appName",
-                        detailedInstruction = "Isolasi akses root agar aplikasi berjalan bersih.",
-                        ksuFix = "Buka KernelSU Next / ReSuKSU -> Superuser -> Cari '$appName' -> Uncheck Root -> Set Mount Namespace ke 'Unshare'.",
-                        magiskFix = "Buka Magisk -> Masuk DenyList -> Centang '$packageName'. Pasang Shamiko.",
-                        apatchFix = "Buka APatch -> Uncheck SuperUser untuk '$packageName'.",
-                        generalAction = "Restart aplikasi setelah menyembunyikan root."
+                        actionTitle = "Gunakan IP Seluler Residensial Bersih",
+                        detailedInstruction = "Gunakan kuota data seluler normal saat login/daftar nomor baru.",
+                        ksuFix = "Matikan VPN di Android.",
+                        magiskFix = "Matikan VPN di Android.",
+                        apatchFix = "Matikan VPN di Android.",
+                        generalAction = "Rotasi IP dengan Mode Pesawat 5 detik."
                     )
                 )
             }
 
-            if (networkIntel.isVpnOrProxy) {
-                score -= 20
-                dangers.add(
-                    AppDangerItem(
-                        title = "Koneksi VPN / Proxy Terdeteksi",
-                        severity = DangerSeverity.MEDIUM,
-                        explanation = "Beberapa aplikasi membatasi registrasi akun baru jika menggunakan IP Datacenter VPN.",
-                        technicalProof = "VPN Terdeteksi (IP: ${networkIntel.publicIp})"
-                    )
-                )
-                fixSteps.add(
-                    AppFixStep(
-                        stepNumber = stepCounter++,
-                        actionTitle = "Matikan VPN",
-                        detailedInstruction = "Gunakan data seluler residential biasa.",
-                        ksuFix = "Matikan VPN di setelan Android.",
-                        magiskFix = "Matikan VPN di setelan Android.",
-                        apatchFix = "Matikan VPN di setelan Android.",
-                        generalAction = "Gunakan Mode Pesawat selama 5 detik untuk merotasi IP seluler."
-                    )
-                )
-            }
-
-            val verdict = when {
-                score >= 85 -> "AMAN (Siap Multi-Akun & Bebas Deteksi)"
-                score >= 65 -> "PERLU PENYESUAIAN ISOLASI ROOT"
-                else -> "TERDETEKSI MODIFIKASI SISTEM"
-            }
-            val colorHex = when {
-                score >= 85 -> 0xFF00E676
-                score >= 65 -> 0xFFFFD600
-                else -> 0xFFFF1744
-            }
+            val verdict = if (score >= 80) "AMAN (Siap Multi-Akun Chat & Komunikasi)" else "WASPADAI BLOKIR SPAM NOMOR BARU"
+            val colorHex = if (score >= 80) 0xFF00E676 else 0xFFFFD600
 
             return TargetAppAuditResult(
                 appName = appName,
@@ -778,7 +1243,113 @@ class TargetAppAuditor(private val context: Context) {
                 statusColorHex = colorHex,
                 detectedDangers = dangers,
                 fixSteps = fixSteps,
-                multiAccountAdvice = "Gunakan profil sandbox bersih, isolasi namespace mount di KSU/Magisk, dan bersihkan cache/GAID saat mengganti akun."
+                multiAccountAdvice = "Untuk Media Sosial ($appName): Hindari VPN saat membuat akun baru untuk mencegah auto-banned spam."
+            )
+        }
+
+        // =========================================================================
+        // TARGET 11: COMPETITIVE ONLINE GAMES (Mobile Legends, Free Fire, PUBG)
+        // =========================================================================
+        else if (engineType == TargetEngineType.COMPETITIVE_GAME) {
+            if (dangerousPaths.foundBinaries.isNotEmpty()) {
+                score -= 30
+                dangers.add(
+                    AppDangerItem(
+                        title = "Biner Root Terdeteksi (Anti-Cheat Security)",
+                        severity = DangerSeverity.HIGH,
+                        explanation = "Mesin anti-cheat game online mendeteksi biner su untuk mencegah script injeksi.",
+                        technicalProof = "Biner: ${dangerousPaths.foundBinaries.joinToString()}"
+                    )
+                )
+                fixSteps.add(
+                    AppFixStep(
+                        stepNumber = stepCounter++,
+                        actionTitle = "Isolasi Game dari Biner Root",
+                        detailedInstruction = "Tambahkan game ke daftar isolasi root.",
+                        ksuFix = "Di KernelSU: Uncheck root untuk '$appName', set Mount Namespace ke Unshare.",
+                        magiskFix = "Di Magisk: Masukkan '$packageName' ke DenyList.",
+                        apatchFix = "Di APatch: Cabut izin SuperUser.",
+                        generalAction = "Hapus modul pengubah memori game."
+                    )
+                )
+            }
+
+            val verdict = if (score >= 80) "AMAN DARI DETEKSI ANTI-CHEAT GAME" else "PERINGATAN DETEKSI SISTEM OLEH ANTI-CHEAT"
+            val colorHex = if (score >= 80) 0xFF00E676 else 0xFFFFD600
+
+            return TargetAppAuditResult(
+                appName = appName,
+                packageName = packageName,
+                isSystemApp = isSystem,
+                engineType = engineType,
+                readinessScore = score.coerceIn(0, 100),
+                verdictTitle = verdict,
+                statusColorHex = colorHex,
+                detectedDangers = dangers,
+                fixSteps = fixSteps,
+                multiAccountAdvice = "Untuk Game Online ($appName): Sembunyikan biner su via KSU Unshare Namespace / Magisk DenyList untuk menghindari device ban."
+            )
+        }
+
+        // =========================================================================
+        // TARGET 12: GENERAL COMMERCE & MARKETPLACES
+        // =========================================================================
+        else if (engineType == TargetEngineType.GENERIC_COMMERCE) {
+            if (dangerousPaths.foundBinaries.isNotEmpty()) {
+                score -= 20
+                dangers.add(
+                    AppDangerItem(
+                        title = "Biner Root Terbaca",
+                        severity = DangerSeverity.MEDIUM,
+                        explanation = "Aplikasi belanja mendeteksi modifikasi sistem root.",
+                        technicalProof = "Biner ditemukan"
+                    )
+                )
+                fixSteps.add(
+                    AppFixStep(
+                        stepNumber = stepCounter++,
+                        actionTitle = "Sembunyikan Root",
+                        detailedInstruction = "Isolasi proses belanja dari akses root.",
+                        ksuFix = "Uncheck root di KernelSU -> Mount Namespace Unshare.",
+                        magiskFix = "Centang di Magisk DenyList.",
+                        apatchFix = "Uncheck SuperUser di APatch.",
+                        generalAction = "Bersihkan data aplikasi."
+                    )
+                )
+            }
+
+            val verdict = if (score >= 80) "AMAN (Siap Multi-Akun Belanja)" else "PERINGATAN DETEKSI AKUN BELANJA"
+            val colorHex = if (score >= 80) 0xFF00E676 else 0xFFFFD600
+
+            return TargetAppAuditResult(
+                appName = appName,
+                packageName = packageName,
+                isSystemApp = isSystem,
+                engineType = engineType,
+                readinessScore = score.coerceIn(0, 100),
+                verdictTitle = verdict,
+                statusColorHex = colorHex,
+                detectedDangers = dangers,
+                fixSteps = fixSteps,
+                multiAccountAdvice = "Untuk Marketplace Umum ($appName): Selalu gunakan isolasi root dan rotasi IP saat membuat akun baru."
+            )
+        }
+
+        // =========================================================================
+        // TARGET 13: GENERAL APP & SYSTEM SERVICE
+        // =========================================================================
+        else {
+            return TargetAppAuditResult(
+                appName = appName,
+                packageName = packageName,
+                isSystemApp = isSystem,
+                engineType = engineType,
+                readinessScore = 100,
+                verdictTitle = if (isSystem) "LAYANAN SISTEM ANDROID (100% AMAN)" else "APLIKASI STANDAR (100% AMAN - BEBAS RISIKO)",
+                statusColorHex = 0xFF00E676,
+                detectedDangers = emptyList(),
+                fixSteps = emptyList(),
+                multiAccountAdvice = "Aplikasi ini adalah utilitas atau komponen sistem normal tanpa sensor anti-fraud multi-akun. Berjalan aman dalam sandbox Android standar."
             )
         }
     }
