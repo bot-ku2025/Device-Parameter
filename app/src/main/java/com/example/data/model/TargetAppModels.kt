@@ -1,7 +1,5 @@
 package com.example.data.model
 
-import android.graphics.drawable.Drawable
-
 enum class AppTypeFilter {
     ALL,
     USER,
@@ -13,18 +11,56 @@ data class InstalledAppInfo(
     val packageName: String,
     val versionName: String,
     val isSystemApp: Boolean,
-    val isRiskTarget: Boolean, // e.g. E-Commerce, E-Wallet, Banking, Social Media
+    val isRiskTarget: Boolean,
     val categoryLabel: String,
     val targetEngineType: TargetEngineType
 )
 
-enum class TargetEngineType(val displayName: String, val fraudSdkProfile: String) {
-    SHOPEE("Shopee Fraud Shield", "SudoHide Detection, In-house Bot Engine, Storage TWRP Scan, Canvas Fingerprint"),
-    TOKOPEDIA("Tokopedia / GoPay", "ThreatMetrix (LexisNexis), AppsFlyer, Mount Namespace Scan, Su Binary Probe"),
-    TIKTOK("ByteDance Security Guardian", "Sensor Telemetry Gyro/Accel, Wi-Fi BSSID Clustering, Hardware CTS Fingerprint"),
-    FINANCIAL_BANKING("Bank & E-Wallet Shield", "Hardware-Backed Play Integrity, RootBeer, Frida/Xposed Hook, Accessibility Probe"),
-    RIDE_HAILING("Gojek / Grab / Maxim", "Mock Location Detection, Developer Options, Fused Location Provider Bypass"),
-    GENERIC_COMMERCE("Standard Anti-Fraud Engine", "AppsFlyer, Device ID Cloning Check, Root & Busybox Basic Scans")
+enum class TargetEngineType(
+    val displayName: String,
+    val fraudSdkProfile: String,
+    val riskContext: String
+) {
+    SHOPEE(
+        "Shopee Security Shield",
+        "SudoHide, In-house Bot Engine, Storage TWRP Scan, Canvas Webview",
+        "Checkout, Voucher Promo & Anti-Tuyul M02/F01"
+    ),
+    TOKOPEDIA(
+        "Tokopedia / GoPay ThreatMetrix",
+        "ThreatMetrix (LexisNexis), AppsFlyer, Mount Namespace Scan, Su Binary Probe",
+        "Proteksi Transaksi, Login Multi-Akun & Kupon Diskon"
+    ),
+    BYTEDANCE_VIDEO(
+        "ByteDance Security Guardian",
+        "ByteDance In-house Sec, GAID Tracking, Wi-Fi BSSID Clustering, Hardware Device ID",
+        "Nonton Drama / Koin Reward / Anti Multi-Device Ban"
+    ),
+    FINANCIAL_BANKING(
+        "Bank & E-Wallet Shield",
+        "Hardware Play Integrity, RootBeer, Frida/Xposed Hook, Accessibility Scanner",
+        "Proteksi Saldo Finansial & Pembayaran E-Wallet"
+    ),
+    RIDE_HAILING(
+        "Ojol / Logistik Location Shield",
+        "Mock Location Detection, Developer Options, Fused Location Provider Bypass",
+        "Deteksi GPS Palsu / Fake GPS Tuyul"
+    ),
+    GENERIC_COMMERCE(
+        "E-Commerce & Marketplaces",
+        "AppsFlyer, Device ID Cloning Check, Root & Busybox Basic Scans",
+        "Multi-Akun Belanja & Pendaftaran Akun Baru"
+    ),
+    ENTERTAINMENT_GAME(
+        "Game & Social Media Anti-Cheat",
+        "Hardware Device Ban, Multiple Accounts Limiter, Emulation Sandbox Check",
+        "Multi-Akun Nonton/Game & Anti-Banned Perangkat"
+    ),
+    SYSTEM_SERVICE(
+        "Layanan Sistem Android",
+        "Android OS Internal Component",
+        "Stabilitas & Kompatibilitas Framework"
+    )
 }
 
 data class LiveNetworkIntelligence(
@@ -34,7 +70,7 @@ data class LiveNetworkIntelligence(
     val country: String = "ID",
     val isVpnOrProxy: Boolean = false,
     val subnetClusterRisk: String = "Rendah",
-    val dynamicRuleVersion: String = "v2026.09-LATEST"
+    val dynamicRuleVersion: String = "v2026.09-LIVE-SYNCED"
 )
 
 data class TargetAppAuditResult(
@@ -43,8 +79,8 @@ data class TargetAppAuditResult(
     val isSystemApp: Boolean,
     val engineType: TargetEngineType,
     val readinessScore: Int, // 0 - 100
-    val verdictTitle: String, // e.g. "100% AMAN (Siap Multi-Akun & Checkout)"
-    val statusColorHex: Long, // Green, Amber, Red
+    val verdictTitle: String,
+    val statusColorHex: Long,
     val detectedDangers: List<AppDangerItem>,
     val fixSteps: List<AppFixStep>,
     val multiAccountAdvice: String
@@ -58,17 +94,20 @@ data class AppDangerItem(
 )
 
 enum class DangerSeverity(val label: String, val weightPenalty: Int) {
-    CRITICAL("KRITIKAL (Auto-Ban)", 35),
-    HIGH("TINGGI (Cekal Akun)", 20),
-    MEDIUM("SEDANG (Kupon Hilang)", 10),
-    INFO("PERINGATAN (Clustering)", 5)
+    CRITICAL("KRITIKAL", 25),
+    HIGH("TINGGI", 15),
+    MEDIUM("SEDANG", 8),
+    INFO("PERINGATAN", 4)
 }
 
 data class AppFixStep(
     val stepNumber: Int,
     val actionTitle: String,
     val detailedInstruction: String,
-    val recommendedModuleOrTool: String
+    val ksuFix: String,
+    val magiskFix: String,
+    val apatchFix: String,
+    val generalAction: String
 )
 
 data class MultiAppAuditSession(

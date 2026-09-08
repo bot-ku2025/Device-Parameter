@@ -244,4 +244,9 @@ class SentinelViewModel(application: Application) : AndroidViewModel(application
             _targetAuditState.value = TargetAuditState.Done(session)
         }
     }
+
+    fun resetTargetAuditSession() {
+        _targetAuditState.value = TargetAuditState.Idle
+        _latestTargetSession.value = null
+    }
 }

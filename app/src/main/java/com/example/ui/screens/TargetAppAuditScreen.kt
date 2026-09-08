@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,18 +24,19 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -47,6 +49,7 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -59,6 +62,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -83,6 +87,7 @@ import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 import com.example.ui.viewmodel.TargetAuditState
+import com.example.util.AppIconManager
 
 @Composable
 fun TargetAppAuditScreen(
@@ -94,12 +99,12 @@ fun TargetAppAuditScreen(
     onSelectAllFiltered: (List<String>) -> Unit,
     onClearSelection: () -> Unit,
     onRunAudit: () -> Unit,
+    onResetAudit: () -> Unit,
     onRefreshApps: () -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var selectedFilter by remember { mutableStateOf(AppTypeFilter.USER) }
 
-    // Filter apps
     val filteredApps = remember(installedApps, searchQuery, selectedFilter) {
         installedApps.filter { app ->
             val matchesType = when (selectedFilter) {
@@ -124,7 +129,6 @@ fun TargetAppAuditScreen(
     ) {
         item {
             Spacer(modifier = Modifier.height(8.dp))
-            // Live Cloud Network Intelligence Card
             NetworkIntelligenceCard(
                 networkIntel = latestSession?.networkIntel ?: LiveNetworkIntelligence(),
                 isRunning = targetAuditState is TargetAuditState.Running
@@ -132,7 +136,6 @@ fun TargetAppAuditScreen(
         }
 
         item {
-            // Title & Action Header
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -146,7 +149,7 @@ fun TargetAppAuditScreen(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Pilih aplikasi target untuk cek kesiapan spoof & anti-fraud",
+                        text = "Pilih aplikasi target untuk audit celah anti-fraud spesifik",
                         color = TextSecondary,
                         fontSize = 12.sp
                     )
@@ -161,7 +164,7 @@ fun TargetAppAuditScreen(
             }
         }
 
-        // Search and Type Filter Tabs
+        // Search and Filter Bar
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -176,9 +179,16 @@ fun TargetAppAuditScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("search_target_apps_field"),
-                        placeholder = { Text("Cari Shopee, Tokopedia, TikTok, DANA...", color = TextMuted, fontSize = 13.sp) },
+                        placeholder = { Text("Cari Shopee, Tokopedia, PineDrama, TikTok...", color = TextMuted, fontSize = 13.sp) },
                         leadingIcon = {
                             Icon(Icons.Default.Search, contentDescription = null, tint = SentinelCyan, modifier = Modifier.size(18.dp))
+                        },
+                        trailingIcon = {
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(onClick = { searchQuery = "" }) {
+                                    Icon(Icons.Default.Clear, contentDescription = "Clear", tint = TextMuted, modifier = Modifier.size(16.dp))
+                                }
+                            }
                         },
                         singleLine = true,
                         shape = RoundedCornerShape(8.dp),
@@ -265,40 +275,63 @@ fun TargetAppAuditScreen(
             }
         }
 
-        // Primary Audit Execution Button & Running Banner
+        // Action Buttons Row (Audit Button & Reset Button)
         item {
             val isScanning = targetAuditState is TargetAuditState.Running
-            Button(
-                onClick = onRunAudit,
-                enabled = selectedPackages.isNotEmpty() && !isScanning,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp)
-                    .testTag("run_target_audit_button"),
-                shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = SentinelCyan,
-                    contentColor = Color.Black,
-                    disabledContainerColor = SentinelSurfaceVariant,
-                    disabledContentColor = TextMuted
-                )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                if (isScanning) {
-                    CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.Black, strokeWidth = 2.dp)
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = (targetAuditState as TargetAuditState.Running).stage,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold
+                Button(
+                    onClick = onRunAudit,
+                    enabled = selectedPackages.isNotEmpty() && !isScanning,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(50.dp)
+                        .testTag("run_target_audit_button"),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = SentinelCyan,
+                        contentColor = Color.Black,
+                        disabledContainerColor = SentinelSurfaceVariant,
+                        disabledContentColor = TextMuted
                     )
-                } else {
-                    Icon(Icons.Default.Security, contentDescription = null, modifier = Modifier.size(20.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "UJI CELAH MULTI-AKUN (${selectedPackages.size} TARGET)",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                ) {
+                    if (isScanning) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.Black, strokeWidth = 2.dp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = (targetAuditState as TargetAuditState.Running).stage,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1
+                        )
+                    } else {
+                        Icon(Icons.Default.Security, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "UJI TARGET (${selectedPackages.size})",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                // Reset Button
+                if (latestSession != null) {
+                    OutlinedButton(
+                        onClick = onResetAudit,
+                        modifier = Modifier
+                            .height(50.dp)
+                            .testTag("reset_target_audit_button"),
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, StatusFail.copy(alpha = 0.6f)),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = StatusFail)
+                    ) {
+                        Icon(Icons.Default.RestartAlt, contentDescription = "Reset Hasil Cek", modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("RESET", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
 
@@ -313,7 +346,7 @@ fun TargetAppAuditScreen(
             }
         }
 
-        // Section: Audit Results (If Completed)
+        // Result Section (Tampil Jika Ada Hasil Sesi)
         if (latestSession != null && latestSession.auditedApps.isNotEmpty()) {
             item {
                 Row(
@@ -321,18 +354,46 @@ fun TargetAppAuditScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "HASIL AUDIT TARGET SPESIFIK",
-                        color = SentinelCyan,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "Rata-rata Skor: ${latestSession.overallReadinessScore}/100",
-                        color = if (latestSession.overallReadinessScore >= 80) StatusPass else StatusFail,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Column {
+                        Text(
+                            text = "HASIL AUDIT TARGET SPESIFIK",
+                            color = SentinelCyan,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Klik kartu untuk melihat detail bahaya & panduan fix",
+                            color = TextMuted,
+                            fontSize = 11.sp
+                        )
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (latestSession.overallReadinessScore >= 80) StatusPass.copy(alpha = 0.15f) else StatusFail.copy(alpha = 0.15f))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "Rata-rata: ${latestSession.overallReadinessScore}/100",
+                                color = if (latestSession.overallReadinessScore >= 80) StatusPass else StatusFail,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        // Tombol Cepat Reset Hasil
+                        IconButton(
+                            onClick = onResetAudit,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(Icons.Default.Clear, contentDescription = "Tutup Hasil", tint = StatusFail, modifier = Modifier.size(18.dp))
+                        }
+                    }
                 }
             }
 
@@ -351,7 +412,7 @@ fun TargetAppAuditScreen(
             }
         }
 
-        // Section: Selectable App Items List
+        // Apps List
         items(filteredApps) { app ->
             SelectableAppCard(
                 app = app,
@@ -416,7 +477,6 @@ fun NetworkIntelligenceCard(networkIntel: LiveNetworkIntelligence, isRunning: Bo
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Public IP Box
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -437,7 +497,6 @@ fun NetworkIntelligenceCard(networkIntel: LiveNetworkIntelligence, isRunning: Bo
                     }
                 }
 
-                // Proxy / VPN Status
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -463,7 +522,7 @@ fun NetworkIntelligenceCard(networkIntel: LiveNetworkIntelligence, isRunning: Bo
                             )
                         }
                         Text(
-                            text = if (networkIntel.isVpnOrProxy) "Auto-Banned E-Commerce" else "Rotasi via Mode Pesawat",
+                            text = if (networkIntel.isVpnOrProxy) "Auto-Banned Anti-Fraud" else "Rotasi via Mode Pesawat",
                             color = TextSecondary,
                             fontSize = 9.sp
                         )
@@ -489,6 +548,11 @@ fun SelectableAppCard(
     isSelected: Boolean,
     onToggle: () -> Unit
 ) {
+    val context = LocalContext.current
+    val appIcon = remember(app.packageName) {
+        AppIconManager.getAppIcon(context, app.packageName)
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -508,19 +572,28 @@ fun SelectableAppCard(
                 modifier = Modifier.weight(1f),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // Real App Icon with Fallback
                 Box(
                     modifier = Modifier
-                        .size(38.dp)
-                        .clip(CircleShape)
-                        .background(if (app.isRiskTarget) SentinelCyan.copy(alpha = 0.15f) else SentinelDarkBg),
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(SentinelDarkBg),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = if (app.isRiskTarget) Icons.Default.Security else Icons.Default.Apps,
-                        contentDescription = null,
-                        tint = if (app.isRiskTarget) SentinelCyan else TextMuted,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    if (appIcon != null) {
+                        Image(
+                            bitmap = appIcon,
+                            contentDescription = app.appName,
+                            modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp))
+                        )
+                    } else {
+                        Icon(
+                            imageVector = if (app.isRiskTarget) Icons.Default.Security else Icons.Default.Apps,
+                            contentDescription = null,
+                            tint = if (app.isRiskTarget) SentinelCyan else TextMuted,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.width(12.dp))
@@ -582,39 +655,77 @@ fun SelectableAppCard(
 
 @Composable
 fun TargetAppResultCard(result: TargetAppAuditResult) {
-    var isExpanded by remember { mutableStateOf(true) }
+    // Mode Expand default Collapsed (false) agar tidak acak-acakan di layar
+    var isExpanded by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val appIcon = remember(result.packageName) {
+        AppIconManager.getAppIcon(context, result.packageName)
+    }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { isExpanded = !isExpanded },
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = SentinelSurface),
         border = BorderStroke(1.2.dp, Color(result.statusColorHex).copy(alpha = 0.6f))
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
-            // Header Row: App Name, Score Badge, Expand Toggle
+            // Header Row: Real App Icon, App Name, Score Badge, Expand Toggle
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = result.appName,
-                        color = TextPrimary,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = result.packageName,
-                        color = TextMuted,
-                        fontSize = 11.sp,
-                        fontFamily = FontFamily.Monospace
-                    )
-                    Text(
-                        text = "SDK Profil: ${result.engineType.displayName}",
-                        color = SentinelCyan,
-                        fontSize = 10.sp
-                    )
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(SentinelDarkBg),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (appIcon != null) {
+                            Image(
+                                bitmap = appIcon,
+                                contentDescription = result.appName,
+                                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp))
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Apps,
+                                contentDescription = null,
+                                tint = SentinelCyan,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(10.dp))
+
+                    Column {
+                        Text(
+                            text = result.appName,
+                            color = TextPrimary,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = result.packageName,
+                            color = TextMuted,
+                            fontSize = 10.sp,
+                            fontFamily = FontFamily.Monospace,
+                            maxLines = 1
+                        )
+                        Text(
+                            text = "Profil: ${result.engineType.displayName}",
+                            color = SentinelCyan,
+                            fontSize = 10.sp
+                        )
+                    }
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -645,6 +756,23 @@ fun TargetAppResultCard(result: TargetAppAuditResult) {
 
             Spacer(modifier = Modifier.height(8.dp))
 
+            // Context Tag (Fokus Sasaran Cek)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(SentinelDarkBg)
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+            ) {
+                Text(
+                    text = "Fokus Audit: ${result.engineType.riskContext}",
+                    color = TextSecondary,
+                    fontSize = 10.sp
+                )
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
             // Verdict Banner
             Box(
                 modifier = Modifier
@@ -670,17 +798,41 @@ fun TargetAppResultCard(result: TargetAppAuditResult) {
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
-            Text(
-                text = result.multiAccountAdvice,
-                color = TextSecondary,
-                fontSize = 11.sp,
-                lineHeight = 15.sp
-            )
+            // Toggle Indicator Bar
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 2.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (isExpanded) "Tutup Rincian Detail" else "Klik untuk Buka Detail Bahaya & Solusi Fix",
+                    color = if (isExpanded) SentinelCyan else TextMuted,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                Icon(
+                    imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = null,
+                    tint = if (isExpanded) SentinelCyan else TextMuted,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
 
+            // Expandable Detail Area
             AnimatedVisibility(visible = isExpanded) {
                 Column {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = result.multiAccountAdvice,
+                        color = TextSecondary,
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp
+                    )
+
                     // Dangers Section
                     if (result.detectedDangers.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(12.dp))
@@ -702,7 +854,7 @@ fun TargetAppResultCard(result: TargetAppAuditResult) {
                     if (result.fixSteps.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "Langkah Fix Tuntas Agar Siap Multi-Akun",
+                            text = "Panduan Fix Tuntas Multi-Root",
                             color = SentinelCyan,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold
@@ -710,8 +862,8 @@ fun TargetAppResultCard(result: TargetAppAuditResult) {
                         Spacer(modifier = Modifier.height(6.dp))
 
                         result.fixSteps.forEach { step ->
-                            FixStepBox(step)
-                            Spacer(modifier = Modifier.height(6.dp))
+                            MultiRootFixStepBox(step)
+                            Spacer(modifier = Modifier.height(8.dp))
                         }
                     } else {
                         Spacer(modifier = Modifier.height(10.dp))
@@ -723,7 +875,7 @@ fun TargetAppResultCard(result: TargetAppAuditResult) {
                                 .padding(10.dp)
                         ) {
                             Text(
-                                text = "Semua parameter aman! Tidak ada celah fisik root, mount leak, atau folder blacklist yang terbaca oleh ${result.appName}.",
+                                text = "Semua parameter aman! Tidak ada celah biner root, mount leak, atau folder blacklist yang terbaca oleh ${result.appName}.",
                                 color = StatusPass,
                                 fontSize = 11.sp
                             )
@@ -790,55 +942,120 @@ fun DangerItemBox(danger: AppDangerItem) {
 }
 
 @Composable
-fun FixStepBox(step: AppFixStep) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(SentinelDarkBg)
-            .border(0.8.dp, SentinelCyan.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
-            .padding(10.dp)
+fun MultiRootFixStepBox(step: AppFixStep) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(10.dp),
+        colors = CardDefaults.cardColors(containerColor = SentinelDarkBg),
+        border = BorderStroke(0.8.dp, SentinelCyan.copy(alpha = 0.35f))
     ) {
-        Row(verticalAlignment = Alignment.Top) {
-            Box(
-                modifier = Modifier
-                    .size(20.dp)
-                    .clip(CircleShape)
-                    .background(SentinelCyan),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "${step.stepNumber}",
-                    color = Color.Black,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
+        Column(modifier = Modifier.padding(12.dp)) {
+            // Header Action Title
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(22.dp)
+                        .clip(CircleShape)
+                        .background(SentinelCyan),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "${step.stepNumber}",
+                        color = Color.Black,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
 
-            Spacer(modifier = Modifier.width(10.dp))
+                Spacer(modifier = Modifier.width(8.dp))
 
-            Column {
                 Text(
                     text = step.actionTitle,
                     color = TextPrimary,
-                    fontSize = 12.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Bold
                 )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = step.detailedInstruction,
-                    color = TextSecondary,
-                    fontSize = 11.sp,
-                    lineHeight = 15.sp
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Alat/Modul: ${step.recommendedModuleOrTool}",
-                    color = SentinelCyan,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Medium
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text(
+                text = step.detailedInstruction,
+                color = TextSecondary,
+                fontSize = 11.sp,
+                lineHeight = 15.sp
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Sub-blok 1: Menggunakan KernelSU / ReSuKSU / KSU Next
+            RootSolutionSubBox(
+                badgeLabel = "Jika Menggunakan KSU / ReSuKSU / KSU Next",
+                badgeColor = Color(0xFF00E676),
+                fixText = step.ksuFix
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // Sub-blok 2: Menggunakan Magisk / Alpha
+            RootSolutionSubBox(
+                badgeLabel = "Jika Menggunakan Magisk / Alpha",
+                badgeColor = Color(0xFFFF9100),
+                fixText = step.magiskFix
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // Sub-blok 3: Menggunakan APatch
+            RootSolutionSubBox(
+                badgeLabel = "Jika Menggunakan APatch",
+                badgeColor = Color(0xFF2979FF),
+                fixText = step.apatchFix
+            )
+
+            if (step.generalAction.isNotBlank()) {
+                Spacer(modifier = Modifier.height(6.dp))
+                RootSolutionSubBox(
+                    badgeLabel = "Tindakan Bersih / Storage",
+                    badgeColor = Color(0xFFE040FB),
+                    fixText = step.generalAction
                 )
             }
+        }
+    }
+}
+
+@Composable
+fun RootSolutionSubBox(badgeLabel: String, badgeColor: Color, fixText: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(6.dp))
+            .background(SentinelSurface)
+            .border(0.6.dp, badgeColor.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
+            .padding(8.dp)
+    ) {
+        Column {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(badgeColor.copy(alpha = 0.15f))
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+            ) {
+                Text(
+                    text = badgeLabel,
+                    color = badgeColor,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = fixText,
+                color = TextPrimary,
+                fontSize = 11.sp,
+                lineHeight = 15.sp
+            )
         }
     }
 }

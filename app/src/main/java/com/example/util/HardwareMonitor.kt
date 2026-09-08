@@ -18,6 +18,7 @@ class HardwareMonitor(private val context: Context) {
     private var lastTotalTime: Long = 0L
     private var lastIdleTime: Long = 0L
     private var smoothedCpu: Float = 14f
+    private var isProcStatAvailable = true
 
     fun getRealtimeStats(): DeviceHardwareStats {
         // 1. RAM Usage
@@ -89,42 +90,45 @@ class HardwareMonitor(private val context: Context) {
     }
 
     private fun readCpuUsage(): Float {
-        try {
-            val reader = RandomAccessFile("/proc/stat", "r")
-            val load = reader.readLine()
-            reader.close()
+        if (isProcStatAvailable) {
+            try {
+                val reader = RandomAccessFile("/proc/stat", "r")
+                val load = reader.readLine()
+                reader.close()
 
-            if (load != null && load.startsWith("cpu ")) {
-                val toks = load.split("\\s+".toRegex()).drop(1)
-                if (toks.size >= 7) {
-                    val user = toks[0].toLong()
-                    val nice = toks[1].toLong()
-                    val system = toks[2].toLong()
-                    val idle = toks[3].toLong()
-                    val iowait = toks[4].toLong()
-                    val irq = toks[5].toLong()
-                    val softirq = toks[6].toLong()
+                if (load != null && load.startsWith("cpu ")) {
+                    val toks = load.split("\\s+".toRegex()).drop(1)
+                    if (toks.size >= 7) {
+                        val user = toks[0].toLong()
+                        val nice = toks[1].toLong()
+                        val system = toks[2].toLong()
+                        val idle = toks[3].toLong()
+                        val iowait = toks[4].toLong()
+                        val irq = toks[5].toLong()
+                        val softirq = toks[6].toLong()
 
-                    val currentTotal = user + nice + system + idle + iowait + irq + softirq
-                    val currentIdle = idle + iowait
+                        val currentTotal = user + nice + system + idle + iowait + irq + softirq
+                        val currentIdle = idle + iowait
 
-                    if (lastTotalTime != 0L) {
-                        val totalDelta = currentTotal - lastTotalTime
-                        val idleDelta = currentIdle - lastIdleTime
-                        if (totalDelta > 0) {
-                            val cpu = ((totalDelta - idleDelta).toFloat() / totalDelta) * 100f
-                            smoothedCpu = (smoothedCpu * 0.4f) + (cpu * 0.6f)
-                            lastTotalTime = currentTotal
-                            lastIdleTime = currentIdle
-                            return smoothedCpu.coerceIn(5f, 99f)
+                        if (lastTotalTime != 0L) {
+                            val totalDelta = currentTotal - lastTotalTime
+                            val idleDelta = currentIdle - lastIdleTime
+                            if (totalDelta > 0) {
+                                val cpu = ((totalDelta - idleDelta).toFloat() / totalDelta) * 100f
+                                smoothedCpu = (smoothedCpu * 0.4f) + (cpu * 0.6f)
+                                lastTotalTime = currentTotal
+                                lastIdleTime = currentIdle
+                                return smoothedCpu.coerceIn(5f, 99f)
+                            }
                         }
+                        lastTotalTime = currentTotal
+                        lastIdleTime = currentIdle
                     }
-                    lastTotalTime = currentTotal
-                    lastIdleTime = currentIdle
                 }
+            } catch (_: Exception) {
+                // proc stat access restricted on Android 8+ by SELinux; disable further attempts to prevent audit spam
+                isProcStatAvailable = false
             }
-        } catch (_: Exception) {
-            // proc stat access restricted on Android 8+
         }
 
         // Realistic oscillation based on thread load for restricted sandboxes

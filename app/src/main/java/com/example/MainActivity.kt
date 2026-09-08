@@ -207,6 +207,7 @@ fun DeviceParameterApp(viewModel: SentinelViewModel = viewModel()) {
                         onSelectAllFiltered = { pkgs -> viewModel.selectAllFiltered(pkgs) },
                         onClearSelection = { viewModel.clearSelectedApps() },
                         onRunAudit = { viewModel.runTargetAppAudit() },
+                        onResetAudit = { viewModel.resetTargetAuditSession() },
                         onRefreshApps = { viewModel.loadInstalledApps() }
                     )
                 }
